@@ -13,7 +13,7 @@ const program = new Command();
 program
   .name("tm")
   .description("TerminalMarket CLI — marketplace for developers")
-  .version("0.4.0");
+  .version("0.5.0");
 
 // -----------------
 // config
@@ -458,6 +458,230 @@ program
     } catch (e) {
       console.error(chalk.red(e?.message || String(e)));
       process.exitCode = 1;
+    }
+  });
+
+// -----------------
+// AI commands
+// -----------------
+const ai = program
+  .command("ai")
+  .description("AI services - run AI models with credits");
+
+ai
+  .command("list")
+  .alias("ls")
+  .description("List available AI models")
+  .action(async () => {
+    try {
+      const data = await apiGet("/ai/models");
+      const { models, categories } = data;
+      
+      if (!models || models.length === 0) {
+        console.log(chalk.yellow("No AI models available yet."));
+        return;
+      }
+      
+      console.log(chalk.bold("Available AI Models"));
+      console.log("");
+      
+      const catMap = new Map((categories || []).map(c => [c.id, c]));
+      
+      // Group by category
+      const grouped = {};
+      for (const model of models) {
+        const cat = catMap.get(model.categoryId);
+        const catName = cat ? cat.name : "Other";
+        if (!grouped[catName]) grouped[catName] = [];
+        grouped[catName].push(model);
+      }
+      
+      for (const [catName, catModels] of Object.entries(grouped)) {
+        console.log(chalk.cyan.bold(`${catName}:`));
+        for (const model of catModels) {
+          const price = parseFloat(model.pricePerRun).toFixed(4);
+          console.log(`  ${chalk.white(model.slug.padEnd(25))} $${price}  ${chalk.dim(model.outputType)}`);
+          if (model.description) {
+            console.log(`    ${chalk.dim(model.description)}`);
+          }
+        }
+        console.log("");
+      }
+      
+      console.log(chalk.dim("Run: tm ai run <model> <input>"));
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+      process.exitCode = 1;
+    }
+  });
+
+ai
+  .command("run <model> [input...]")
+  .description("Run an AI model")
+  .action(async (model, input) => {
+    try {
+      const inputText = input.join(" ");
+      if (!inputText) {
+        console.error(chalk.red("Input is required. Usage: tm ai run <model> <input>"));
+        return;
+      }
+      
+      const result = await apiPost(`/ai/run/${model}`, { input: inputText });
+      
+      console.log(chalk.bold("AI Result"));
+      console.log("");
+      
+      if (result.output?.message) {
+        console.log(result.output.message);
+      }
+      if (result.output?.note) {
+        console.log(chalk.dim(result.output.note));
+      }
+      
+      console.log("");
+      console.log(`${chalk.dim("credits used:")} $${result.creditsUsed.toFixed(4)}`);
+      console.log(`${chalk.dim("new balance:")} $${result.newBalance}`);
+    } catch (e) {
+      if (e?.message?.includes("402") || e?.message?.includes("Insufficient")) {
+        console.error(chalk.red("Insufficient credits. Use 'tm ai topup <amount>' to add credits."));
+      } else {
+        console.error(chalk.red(e?.message || String(e)));
+      }
+      process.exitCode = 1;
+    }
+  });
+
+ai
+  .command("credits")
+  .alias("balance")
+  .description("Check your AI credit balance")
+  .action(async () => {
+    try {
+      const credits = await apiGet("/credits");
+      
+      console.log(chalk.bold("AI Credits"));
+      console.log("");
+      console.log(`${chalk.dim("balance:")}     $${parseFloat(credits.balance).toFixed(4)}`);
+      console.log(`${chalk.dim("purchased:")}   $${parseFloat(credits.totalPurchased).toFixed(2)}`);
+      console.log(`${chalk.dim("spent:")}       $${parseFloat(credits.totalSpent).toFixed(4)}`);
+      console.log("");
+      console.log(chalk.dim("Top up: tm ai topup <amount>"));
+    } catch (e) {
+      if (e?.message?.includes("401") || e?.message?.includes("Login")) {
+        console.log(chalk.yellow("Please login first: tm login <email> <password>"));
+      } else {
+        console.error(chalk.red(e?.message || String(e)));
+        process.exitCode = 1;
+      }
+    }
+  });
+
+ai
+  .command("topup <amount>")
+  .alias("add")
+  .description("Add credits to your account ($5 minimum)")
+  .action(async (amount) => {
+    try {
+      const amountNum = parseFloat(amount);
+      if (isNaN(amountNum) || amountNum < 5) {
+        console.error(chalk.red("Minimum top-up is $5"));
+        return;
+      }
+      
+      const result = await apiPost("/credits/topup", { amount: amountNum });
+      
+      console.log(chalk.green("Payment link created!"));
+      console.log("");
+      console.log("Open this link to complete payment:");
+      console.log(chalk.cyan(result.url));
+      console.log("");
+      console.log(chalk.dim("Credits will be added after payment."));
+      
+      // Try to open in browser
+      try {
+        await open(result.url);
+        console.log(chalk.dim("(Opening in browser...)"));
+      } catch {}
+    } catch (e) {
+      if (e?.message?.includes("401") || e?.message?.includes("Login")) {
+        console.log(chalk.yellow("Please login first: tm login <email> <password>"));
+      } else {
+        console.error(chalk.red(e?.message || String(e)));
+        process.exitCode = 1;
+      }
+    }
+  });
+
+ai
+  .command("history")
+  .description("View your AI usage history")
+  .option("-l, --limit <n>", "Limit results", "20")
+  .action(async (opts) => {
+    try {
+      const logs = await apiGet("/ai/history");
+      const limit = parseInt(opts.limit) || 20;
+      
+      if (!logs || logs.length === 0) {
+        console.log(chalk.yellow("No AI usage history yet."));
+        console.log(chalk.dim("Try: tm ai run <model> <input>"));
+        return;
+      }
+      
+      console.log(chalk.bold("AI Usage History"));
+      console.log("");
+      
+      logs.slice(0, limit).forEach(log => {
+        const date = new Date(log.createdAt).toLocaleDateString();
+        const credits = parseFloat(log.creditsCharged).toFixed(4);
+        const statusColor = log.status === "completed" ? chalk.green : 
+                           log.status === "failed" ? chalk.red : chalk.yellow;
+        
+        console.log(`${date}  Model #${log.modelId}  $${credits}  ${statusColor(log.status)}`);
+      });
+    } catch (e) {
+      if (e?.message?.includes("401") || e?.message?.includes("Login")) {
+        console.log(chalk.yellow("Please login first: tm login <email> <password>"));
+      } else {
+        console.error(chalk.red(e?.message || String(e)));
+        process.exitCode = 1;
+      }
+    }
+  });
+
+// Shortcuts for AI commands
+program
+  .command("credits")
+  .description("Check AI credits (shortcut)")
+  .action(async () => {
+    try {
+      const credits = await apiGet("/credits");
+      console.log(chalk.bold("AI Credits"));
+      console.log(`${chalk.dim("balance:")} $${parseFloat(credits.balance).toFixed(4)}`);
+      console.log(chalk.dim("Top up: tm ai topup <amount>"));
+    } catch (e) {
+      if (e?.message?.includes("401")) {
+        console.log(chalk.yellow("Please login first."));
+      } else {
+        console.error(chalk.red(e?.message || String(e)));
+      }
+    }
+  });
+
+program
+  .command("topup <amount>")
+  .description("Add AI credits (shortcut)")
+  .action(async (amount) => {
+    const amountNum = parseFloat(amount);
+    if (isNaN(amountNum) || amountNum < 5) {
+      console.error(chalk.red("Minimum top-up is $5"));
+      return;
+    }
+    try {
+      const result = await apiPost("/credits/topup", { amount: amountNum });
+      console.log(chalk.green("Payment link: ") + chalk.cyan(result.url));
+      try { await open(result.url); } catch {}
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
     }
   });
 

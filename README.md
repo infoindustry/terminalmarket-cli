@@ -71,6 +71,30 @@ tm reviews <store-id>              # View store reviews
 tm review <store-id> <rating> [comment]  # Leave a review (1-5 stars)
 ```
 
+### AI Services
+
+Run AI models directly from the terminal using credits.
+
+```bash
+tm ai list                         # List available AI models
+tm ai run <model> <input>          # Run an AI model
+tm ai credits                      # Check your credit balance
+tm ai topup <amount>               # Add credits ($5 minimum)
+tm ai history                      # View usage history
+
+# Shortcuts
+tm credits                         # Check credits (shortcut)
+tm topup <amount>                  # Add credits (shortcut)
+```
+
+Example:
+```bash
+tm ai list                         # See available models
+tm ai topup 10                     # Add $10 credits
+tm ai run text-rewrite "Fix this text"  # Run AI model
+tm ai credits                      # Check remaining balance
+```
+
 ### Service Types
 
 Products have different service types:
@@ -165,6 +189,10 @@ tm orders
 - `POST /api/cart/clear` — Clear cart
 - `GET /api/orders` — Get orders
 - `POST /api/stores/:id/reviews` — Leave review
+- `GET /api/credits` — Get AI credits balance
+- `POST /api/credits/topup` — Create Stripe checkout for credits
+- `POST /api/ai/run/:model` — Run AI model
+- `GET /api/ai/history` — Get AI usage history
 - `POST /api/clicks` — Track clicks
 - `POST /api/intents` — Create purchase intent
 
