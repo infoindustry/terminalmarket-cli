@@ -80,3 +80,9 @@ export function containsQuery(p, q) {
   ].filter(Boolean).join(" ").toLowerCase();
   return hay.includes(q.toLowerCase());
 }
+
+export function formatStars(rating) {
+  const fullStars = Math.floor(rating);
+  const emptyStars = 5 - fullStars;
+  return '★'.repeat(fullStars) + '☆'.repeat(emptyStars);
+}
