@@ -13,7 +13,7 @@ const program = new Command();
 program
   .name("tm")
   .description("TerminalMarket CLI — marketplace for developers")
-  .version("0.5.1");
+  .version("0.6.0");
 
 // -----------------
 // config
@@ -110,6 +110,45 @@ program
       clearUser();
       clearSession();
       console.log(chalk.green("Logged out."));
+    }
+  });
+
+// GitHub auth - opens browser
+program
+  .command("auth")
+  .description("Authenticate with GitHub (opens browser)")
+  .argument("[provider]", "Auth provider (github)")
+  .action(async (provider) => {
+    if (!provider || provider === "github") {
+      const apiBase = getApiBase();
+      const authUrl = `${apiBase}/auth/github`;
+      console.log(chalk.green("Opening GitHub authentication..."));
+      console.log(chalk.dim(authUrl));
+      try {
+        await open(authUrl);
+        console.log(chalk.dim("Complete login in browser, then run 'tm whoami' to verify."));
+      } catch {
+        console.log(chalk.yellow("Could not open browser. Visit manually:"));
+        console.log(authUrl);
+      }
+    } else {
+      console.error(chalk.red(`Unknown provider: ${provider}. Use 'github'.`));
+    }
+  });
+
+program
+  .command("github")
+  .description("Login with GitHub (opens browser)")
+  .action(async () => {
+    const apiBase = getApiBase();
+    const authUrl = `${apiBase}/auth/github`;
+    console.log(chalk.green("Opening GitHub authentication..."));
+    try {
+      await open(authUrl);
+      console.log(chalk.dim("Complete login in browser, then run 'tm whoami' to verify."));
+    } catch {
+      console.log(chalk.yellow("Could not open browser. Visit:"));
+      console.log(authUrl);
     }
   });
 
@@ -685,6 +724,178 @@ program
       try { await open(result.url); } catch {}
     } catch (e) {
       console.error(chalk.red(e?.message || String(e)));
+    }
+  });
+
+// -----------------
+// alias commands
+// -----------------
+const alias = program
+  .command("alias")
+  .description("Manage custom command aliases");
+
+alias
+  .command("list")
+  .alias("ls")
+  .description("List your aliases")
+  .action(async () => {
+    try {
+      const aliases = await apiGet("/aliases");
+      
+      if (!aliases || aliases.length === 0) {
+        console.log(chalk.yellow("No aliases defined."));
+        console.log(chalk.dim("Create one: tm alias add <name> <command>"));
+        return;
+      }
+      
+      console.log(chalk.bold("Your Aliases"));
+      console.log("");
+      aliases.forEach(a => {
+        console.log(`  ${chalk.cyan(a.name)} → ${a.command}`);
+      });
+    } catch (e) {
+      if (e?.message?.includes("401")) {
+        console.log(chalk.yellow("Please login first."));
+      } else {
+        console.error(chalk.red(e?.message || String(e)));
+      }
+    }
+  });
+
+alias
+  .command("add <name> <command...>")
+  .description("Create an alias")
+  .action(async (name, command) => {
+    try {
+      const commandStr = command.join(" ");
+      await apiPost("/aliases", { name, command: commandStr });
+      console.log(chalk.green(`Alias created: ${name} → ${commandStr}`));
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+    }
+  });
+
+alias
+  .command("remove <name>")
+  .alias("rm")
+  .description("Remove an alias")
+  .action(async (name) => {
+    try {
+      await apiDelete(`/aliases/${encodeURIComponent(name)}`);
+      console.log(chalk.green(`Alias '${name}' removed.`));
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+    }
+  });
+
+program
+  .command("aliases")
+  .description("List your aliases (shortcut)")
+  .action(async () => {
+    try {
+      const aliases = await apiGet("/aliases");
+      if (!aliases || aliases.length === 0) {
+        console.log(chalk.yellow("No aliases. Create: tm alias add <name> <command>"));
+        return;
+      }
+      aliases.forEach(a => {
+        console.log(`${chalk.cyan(a.name)} → ${a.command}`);
+      });
+    } catch (e) {
+      if (e?.message?.includes("401")) {
+        console.log(chalk.yellow("Please login first."));
+      } else {
+        console.error(chalk.red(e?.message || String(e)));
+      }
+    }
+  });
+
+// -----------------
+// reward commands (Push Rewards)
+// -----------------
+const reward = program
+  .command("reward")
+  .description("Manage push rewards (auto-order after GitHub pushes)");
+
+reward
+  .command("list")
+  .alias("ls")
+  .description("List your reward rules")
+  .action(async () => {
+    try {
+      const rules = await apiGet("/rewards");
+      
+      if (!rules || rules.length === 0) {
+        console.log(chalk.yellow("No reward rules defined."));
+        console.log(chalk.dim("Create one: tm reward add <productId> <pushCount>"));
+        return;
+      }
+      
+      console.log(chalk.bold("Your Reward Rules"));
+      console.log("");
+      rules.forEach(r => {
+        const status = r.active ? chalk.green("active") : chalk.dim("paused");
+        console.log(`  Product #${r.productId}: every ${r.pushCount} pushes [${status}]`);
+        console.log(`    ${chalk.dim(`progress: ${r.currentPushes || 0}/${r.pushCount}`)}`);
+      });
+    } catch (e) {
+      if (e?.message?.includes("401")) {
+        console.log(chalk.yellow("Please login first."));
+      } else {
+        console.error(chalk.red(e?.message || String(e)));
+      }
+    }
+  });
+
+reward
+  .command("add <productId> <pushCount>")
+  .description("Create a reward rule (auto-order after N pushes)")
+  .action(async (productId, pushCount) => {
+    try {
+      await apiPost("/rewards", {
+        productId: parseInt(productId),
+        pushCount: parseInt(pushCount)
+      });
+      console.log(chalk.green(`Reward rule created! Product #${productId} every ${pushCount} pushes.`));
+      console.log(chalk.dim("Connect GitHub webhook to start tracking pushes."));
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+    }
+  });
+
+reward
+  .command("remove <productId>")
+  .alias("rm")
+  .description("Remove a reward rule")
+  .action(async (productId) => {
+    try {
+      await apiDelete(`/rewards/${productId}`);
+      console.log(chalk.green(`Reward rule for product #${productId} removed.`));
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+    }
+  });
+
+program
+  .command("rewards")
+  .description("List reward rules (shortcut)")
+  .action(async () => {
+    try {
+      const rules = await apiGet("/rewards");
+      if (!rules || rules.length === 0) {
+        console.log(chalk.yellow("No reward rules. Create: tm reward add <productId> <pushCount>"));
+        return;
+      }
+      rules.forEach(r => {
+        const status = r.active ? chalk.green("✓") : chalk.dim("○");
+        console.log(`${status} Product #${r.productId}: every ${r.pushCount} pushes (${r.currentPushes || 0}/${r.pushCount})`);
+      });
+    } catch (e) {
+      if (e?.message?.includes("401")) {
+        console.log(chalk.yellow("Please login first."));
+      } else {
+        console.error(chalk.red(e?.message || String(e)));
+      }
     }
   });
 
