@@ -13,7 +13,7 @@ const program = new Command();
 program
   .name("tm")
   .description("TerminalMarket CLI — marketplace for developers")
-  .version("0.5.0");
+  .version("0.5.1");
 
 // -----------------
 // config
@@ -54,12 +54,15 @@ program
   .command("register <email> <password>")
   .description("Create a new account")
   .option("-n, --name <name>", "Your name")
+  .option("-u, --username <username>", "Username")
   .action(async (email, password, opts) => {
     try {
+      const username = opts.username || email.split("@")[0];
       const result = await apiPost("/auth/register", {
         email,
         password,
-        name: opts.name || email.split("@")[0]
+        username,
+        name: opts.name || username
       });
       
       if (result.user) {
