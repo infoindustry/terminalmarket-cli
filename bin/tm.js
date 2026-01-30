@@ -411,7 +411,6 @@ program
         { key: "name", title: "name" },
         { key: "serviceType", title: "type" },
         { key: "verified", title: "verified" },
-        { key: "tier", title: "tier" },
       ]);
     } catch (e) {
       console.error(chalk.red(e?.message || String(e)));
@@ -455,11 +454,6 @@ program
         console.log(`${chalk.dim("country:")} ${seller.baseCountry}`);
       }
       
-      const tier = seller.subscriptionTier || "free";
-      const tierLabel = tier === "premium" ? chalk.yellow("★ Premium") : 
-                       tier === "basic" ? chalk.blue("● Basic") : chalk.dim("○ Free");
-      console.log(`${chalk.dim("tier:")} ${tierLabel}`);
-      
       if (seller.website) console.log(`${chalk.dim("website:")} ${seller.website}`);
       if (seller.supportEmail) console.log(`${chalk.dim("support:")} ${seller.supportEmail}`);
       if (seller.badges && seller.badges.length > 0) {
@@ -471,9 +465,6 @@ program
       if (seller.shippingPolicy) console.log(`${chalk.dim("shippingPolicy:")} ${seller.shippingPolicy}`);
       if (seller.returnPolicy) console.log(`${chalk.dim("returnPolicy:")} ${seller.returnPolicy}`);
       
-      if (seller.terminalCheckoutEnabled) {
-        console.log(chalk.green("\n✓ Terminal Checkout enabled (buy directly in CLI)"));
-      }
     } catch (e) {
       console.error(chalk.red(e?.message || String(e)));
       process.exitCode = 1;
@@ -527,30 +518,6 @@ program
     console.log("healthy snacks, coworking spaces, productivity tools, and more.\n");
     console.log(chalk.dim("Website: https://terminalmarket.app"));
     console.log(chalk.dim("CLI:     npm i -g terminalmarket"));
-  });
-
-program
-  .command("tiers")
-  .description("Show seller subscription tiers")
-  .action(() => {
-    console.log(chalk.bold("\nSeller Subscription Tiers\n"));
-    
-    console.log(chalk.dim("○ Free Tier") + " - $0/month");
-    console.log("  • 5 products max");
-    console.log("  • 5% commission on sales");
-    console.log("  • Basic analytics\n");
-    
-    console.log(chalk.blue("● Basic Tier") + " - $29/month");
-    console.log("  • 10 products max");
-    console.log("  • 4% commission on sales");
-    console.log("  • Priority support\n");
-    
-    console.log(chalk.yellow("★ Premium Tier") + " - $99/month");
-    console.log("  • Unlimited products");
-    console.log("  • 2.5% commission on sales");
-    console.log("  • Stripe Connect integration");
-    console.log("  • Terminal Checkout (in-CLI purchases)");
-    console.log("  • Advanced analytics");
   });
 
 // -----------------

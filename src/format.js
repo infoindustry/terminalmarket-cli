@@ -41,9 +41,6 @@ export function pickSellerFields(s) {
   const typeIcon = serviceType === "global" ? "🌍" : 
                   serviceType === "national" ? "🏳️" : "📍";
   
-  const tier = s?.subscriptionTier || "free";
-  const tierIcon = tier === "premium" ? "★" : tier === "basic" ? "●" : "○";
-  
   return {
     id: s?.id ?? "",
     slug: s?.slug ?? "",
@@ -52,7 +49,6 @@ export function pickSellerFields(s) {
     badges: Array.isArray(s?.badges) ? s.badges.join(", ") : "",
     status: s?.status ?? "",
     serviceType: `${typeIcon} ${serviceType}`,
-    tier: `${tierIcon} ${tier}`,
     baseCity: s?.baseCity ?? "",
     baseCountry: s?.baseCountry ?? "",
   };
