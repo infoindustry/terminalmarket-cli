@@ -1444,13 +1444,13 @@ program
 
 // Command groups for organized help
 const commandGroups = {
-  'Authentication': ['login', 'logout', 'register', 'auth', 'github', 'whoami', 'profile'],
-  'Shopping': ['products', 'search', 'view', 'open', 'buy', 'categories', 'category'],
+  'Authentication': ['login', 'logout', 'register', 'auth', 'whoami', 'profile'],
+  'Shopping': ['featured', 'deals', 'products', 'search', 'view', 'buy', 'categories'],
   'Cart & Orders': ['cart', 'add', 'checkout', 'orders'],
-  'Stores': ['sellers', 'seller', 'store', 'reviews', 'review', 'where'],
+  'Stores': ['sellers', 'store', 'reviews', 'where'],
   'AI Services': ['ai', 'credits', 'topup'],
-  'Personalization': ['alias', 'aliases', 'reward', 'rewards'],
-  'System': ['start', 'config', 'help', 'about', 'offers']
+  'Personalization': ['alias', 'reward'],
+  'System': ['start', 'doctor', 'config', 'help', 'about']
 };
 
 // Custom help formatter
@@ -1528,6 +1528,14 @@ function showHelp(commandName = null) {
   console.log(chalk.magenta.bold('Usage:'), chalk.green('tm'), chalk.cyan('<command>'), chalk.dim('[options]'));
   console.log();
   
+  // Quick Start section
+  console.log(chalk.yellow.bold('Quick Start:'));
+  console.log(`  ${chalk.green('tm start')}              ${chalk.dim('interactive onboarding')}`);
+  console.log(`  ${chalk.green('tm where berlin')}       ${chalk.dim('set your location')}`);
+  console.log(`  ${chalk.green('tm featured')}           ${chalk.dim('see top picks')}`);
+  console.log(`  ${chalk.green('tm buy <id>')}           ${chalk.dim('purchase a product')}`);
+  console.log();
+  
   // Collect all commands
   const allCommands = {};
   program.commands.forEach(cmd => {
@@ -1577,18 +1585,15 @@ function showHelp(commandName = null) {
     
     groupCmds.forEach(c => {
       const rawCmd = c.name + (c.args ? ' ' + c.args : '');
-      const padded = rawCmd.padEnd(COL_WIDTH);
-      const suffix = c.hasSubcommands ? ' ⊕' : '';
       console.log('  ' + chalk.cyan(c.name) + (c.args ? chalk.yellow(' ' + c.args) : '') + 
                   ' '.repeat(Math.max(1, COL_WIDTH - rawCmd.length)) + 
-                  chalk.dim(c.desc) + chalk.dim(suffix));
+                  chalk.dim(c.desc));
     });
     console.log();
   }
   
-  console.log(chalk.dim('─'.repeat(60)));
-  console.log(chalk.dim("  💡 Run '") + chalk.cyan('tm help <command>') + chalk.dim("' for detailed help"));
-  console.log(chalk.dim('  ⊕ = has subcommands'));
+  console.log(chalk.dim('─'.repeat(50)));
+  console.log(chalk.dim("  💡 tm help <command>") + chalk.dim(" — detailed help"));
   console.log();
 }
 
@@ -1708,6 +1713,156 @@ program
       stopSpinner(false, "Failed to load");
       printError(e?.message || String(e));
     }
+  });
+
+program
+  .command("featured")
+  .alias("best")
+  .description("Top picks this week (by city + global)")
+  .action(async () => {
+    const spinner = createSpinner("Loading featured products...");
+    try {
+      const location = getLocation();
+      let products = await apiGet("/products");
+      
+      // Featured first, then by city
+      const featured = products.filter(p => p.featured);
+      const local = location?.city 
+        ? products.filter(p => !p.featured && p.city?.toLowerCase() === location.city.toLowerCase())
+        : [];
+      const global = products.filter(p => !p.featured && p.serviceType === "global").slice(0, 5);
+      
+      const combined = [...featured, ...local, ...global].slice(0, 10);
+      
+      stopSpinner(true, `${combined.length} top picks`);
+      
+      if (combined.length === 0) {
+        printEmpty("No featured products yet");
+        return;
+      }
+      
+      console.log();
+      console.log(chalk.green.bold("  ⭐ Featured This Week"));
+      console.log(chalk.dim("  ─".repeat(25)));
+      console.log();
+      
+      combined.forEach((p, i) => {
+        const badge = p.featured ? chalk.yellow(" ★") : "";
+        const loc = p.city ? chalk.dim(` 📍 ${p.city}`) : "";
+        console.log(`  ${chalk.dim(`${i + 1}.`)} ${chalk.white(p.name)}${badge}${loc}`);
+        console.log(`     ${chalk.green(`$${p.price}`)} ${chalk.dim("—")} ${chalk.dim(p.description?.slice(0, 40) || "")}`);
+        console.log();
+      });
+      
+      showNextSteps([
+        { cmd: "tm buy <id>", desc: "purchase a product" },
+        { cmd: "tm view <id>", desc: "see details" }
+      ]);
+    } catch (e) {
+      stopSpinner(false, "Failed");
+      printError(e?.message || String(e));
+    }
+  });
+
+program
+  .command("deals")
+  .description("Best deals and curated offers")
+  .action(async () => {
+    const spinner = createSpinner("Finding best deals...");
+    try {
+      const products = await apiGet("/products");
+      
+      // Sort by featured, then by price (lowest first for deals)
+      const sorted = [...products]
+        .sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || a.price - b.price)
+        .slice(0, 10);
+      
+      stopSpinner(true, `${sorted.length} deals found`);
+      
+      console.log();
+      console.log(chalk.green.bold("  🔥 Best Deals"));
+      console.log(chalk.dim("  ─".repeat(25)));
+      console.log();
+      
+      sorted.forEach((p, i) => {
+        const badge = p.featured ? chalk.yellow(" ★ Featured") : "";
+        console.log(`  ${chalk.dim(`${i + 1}.`)} ${chalk.white(p.name)}${badge}`);
+        console.log(`     ${chalk.green.bold(`$${p.price}`)} ${chalk.dim(p.category || "")}`);
+        console.log();
+      });
+      
+      showNextSteps([
+        { cmd: "tm buy <id>", desc: "purchase now" }
+      ]);
+    } catch (e) {
+      stopSpinner(false, "Failed");
+      printError(e?.message || String(e));
+    }
+  });
+
+program
+  .command("doctor")
+  .description("Check CLI health and configuration")
+  .action(async () => {
+    console.log();
+    console.log(chalk.green.bold("  🩺 TerminalMarket Doctor"));
+    console.log(chalk.dim("  ─".repeat(25)));
+    console.log();
+    
+    let issues = 0;
+    
+    // Check API
+    const apiBase = getApiBase();
+    console.log(chalk.white("  API Endpoint:"));
+    console.log(`    ${chalk.dim(apiBase)}`);
+    
+    const spinner = createSpinner("Testing API connection...");
+    try {
+      await apiGet("/categories");
+      stopSpinner(true, "API is reachable");
+    } catch (e) {
+      stopSpinner(false, "API unreachable");
+      console.log(chalk.red(`    ✗ ${e?.message || "Connection failed"}`));
+      console.log(chalk.dim("    💡 Check your internet or run: tm config set api <url>"));
+      issues++;
+    }
+    
+    // Check auth
+    console.log();
+    console.log(chalk.white("  Authentication:"));
+    try {
+      const status = await apiGet("/auth/status");
+      if (status.isAuthenticated && status.user) {
+        console.log(chalk.green(`    ✓ Logged in as ${status.user.email}`));
+      } else {
+        console.log(chalk.yellow(`    ○ Not logged in`));
+        console.log(chalk.dim("    💡 Run: tm login <email>"));
+      }
+    } catch {
+      console.log(chalk.yellow(`    ○ Could not check auth status`));
+    }
+    
+    // Check location
+    console.log();
+    console.log(chalk.white("  Location:"));
+    const location = getLocation();
+    if (location?.city) {
+      console.log(chalk.green(`    ✓ Set to ${location.city}`));
+    } else {
+      console.log(chalk.yellow(`    ○ Not set (local services hidden)`));
+      console.log(chalk.dim("    💡 Run: tm where <city>"));
+      issues++;
+    }
+    
+    // Summary
+    console.log();
+    console.log(chalk.dim("  ─".repeat(25)));
+    if (issues === 0) {
+      console.log(chalk.green.bold("  ✓ All checks passed!"));
+    } else {
+      console.log(chalk.yellow(`  ⚠ ${issues} issue${issues > 1 ? "s" : ""} found`));
+    }
+    console.log();
   });
 
 program
