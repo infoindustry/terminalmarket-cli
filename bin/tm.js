@@ -77,7 +77,9 @@ const program = new Command();
 program
   .name("tm")
   .description("TerminalMarket CLI — marketplace for developers")
-  .version(VERSION);
+  .version(VERSION)
+  .helpOption(false)
+  .addHelpCommand(false);
 
 // -----------------
 // config
@@ -1715,9 +1717,11 @@ program
     showHelp(commandName);
   });
 
-program.parse(process.argv);
-
-if (!process.argv.slice(2).length) {
+// Handle no args - show beautiful help
+if (process.argv.length <= 2) {
   showStatusBar();
   showHelp();
+  process.exit(0);
 }
+
+program.parse(process.argv);
