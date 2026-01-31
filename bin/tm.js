@@ -9,17 +9,24 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
 import { apiGet, apiPost, apiDelete, apiPatch } from "../src/api.js";
-import { getApiBase, setApiBase, getUser, setUser, clearUser, clearSession } from "../src/config.js";
+import { getApiBase, setApiBase, getUser, setUser, clearUser, clearSession, isFirstRun, markFirstRunComplete, setLocation, getLocation } from "../src/config.js";
 import { 
   printTable, pickProductFields, pickSellerFields, pickOfferFields, containsQuery, formatStars,
   printHeader, printDivider, printSuccess, printError, printWarning, printInfo, printField, printEmpty,
   printProductCard, printCart, printOrders, printStoreCard, printSellers, printReviews, printAIModels, printCredits
 } from "../src/format.js";
+import { showWelcome, showBox, showError, showSuccess, showStatusBar, showNextSteps, createSpinner, stopSpinner } from "../src/ui.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const pkg = JSON.parse(readFileSync(join(__dirname, "../package.json"), "utf-8"));
 const VERSION = pkg.version;
+
+if (isFirstRun() && process.argv.length <= 2) {
+  showWelcome(VERSION);
+  markFirstRunComplete();
+  process.exit(0);
+}
 // Helper for hidden password input
 function askPassword(prompt = "Password: ") {
   return new Promise((resolve) => {
@@ -1002,6 +1009,7 @@ program
   .option("--city <city>", "Filter by city (for local services)")
   .option("--country <country>", "Filter by country")
   .action(async (opts) => {
+    const spinner = createSpinner("Fetching products...");
     try {
       const limit = Math.max(1, Math.min(200, Number.parseInt(opts.limit, 10) || 20));
       
@@ -1022,6 +1030,8 @@ program
       }
       
       const products = await apiGet(url);
+      stopSpinner(true, `Found ${products.length} products`);
+      
       const rows = (products || []).slice(0, limit).map(pickProductFields);
       printTable(rows, [
         { key: "id", title: "id" },
@@ -1031,7 +1041,13 @@ program
         { key: "category", title: "category" },
         { key: "serviceType", title: "type" },
       ]);
+      
+      showNextSteps([
+        { cmd: "tm view <id>", desc: "view product details" },
+        { cmd: "tm add <id>", desc: "add to cart" }
+      ]);
     } catch (e) {
+      stopSpinner(false, "Failed to load products");
       console.error(chalk.red(e?.message || String(e)));
       process.exitCode = 1;
     }
@@ -1469,7 +1485,7 @@ const commandGroups = {
   'Stores': ['sellers', 'seller', 'store', 'reviews', 'review', 'where'],
   'AI Services': ['ai', 'credits', 'topup'],
   'Personalization': ['alias', 'aliases', 'reward', 'rewards'],
-  'System': ['config', 'help', 'about', 'offers']
+  'System': ['start', 'config', 'help', 'about', 'offers']
 };
 
 // Custom help formatter
@@ -1612,6 +1628,122 @@ function showHelp(commandName = null) {
 }
 
 program
+  .command("where [city]")
+  .description("Set or view your location (for local services)")
+  .action(async (city) => {
+    if (city) {
+      setLocation(city);
+      showSuccess(`Location set to ${city}`);
+      showNextSteps([
+        { cmd: "tm products", desc: "browse products in " + city },
+        { cmd: "tm search lunch", desc: "find lunch options" }
+      ]);
+    } else {
+      const location = getLocation();
+      if (location?.city) {
+        console.log();
+        console.log(chalk.green("  📍 Location: ") + chalk.white.bold(location.city));
+        console.log();
+        console.log(chalk.dim("  💡 tm where <city> — change location"));
+        console.log();
+      } else {
+        console.log();
+        console.log(chalk.dim("  📍 Location not set"));
+        console.log();
+        console.log(chalk.dim("  💡 Set location for local services:"));
+        console.log(chalk.cyan("     tm where berlin"));
+        console.log(chalk.cyan("     tm where prague"));
+        console.log();
+      }
+    }
+  });
+
+program
+  .command("start")
+  .alias("tour")
+  .description("Interactive onboarding tour")
+  .action(async () => {
+    const inquirer = await import("inquirer").then(m => m.default);
+    
+    console.log();
+    console.log(chalk.green.bold("  Welcome to TerminalMarket! 🚀"));
+    console.log(chalk.dim("  Let's get you started with a quick tour."));
+    console.log();
+    
+    const { city } = await inquirer.prompt([
+      {
+        type: "input",
+        name: "city",
+        message: "What city are you in?",
+        default: "Berlin"
+      }
+    ]);
+    
+    setLocation(city);
+    console.log(chalk.green(`  ✓ Location set to ${city}`));
+    console.log();
+    
+    const { action } = await inquirer.prompt([
+      {
+        type: "list",
+        name: "action",
+        message: "What would you like to explore?",
+        choices: [
+          { name: "🍽  Food & Drinks", value: "food" },
+          { name: "🤖  AI Services", value: "ai" },
+          { name: "🏢  Coworking Spaces", value: "coworking" },
+          { name: "🛠  Developer Tools", value: "digital" },
+          { name: "📦  Browse all products", value: "all" }
+        ]
+      }
+    ]);
+    
+    console.log();
+    
+    const spinner = createSpinner("Fetching products...");
+    
+    try {
+      let products;
+      if (action === "all") {
+        products = await apiGet("/products");
+      } else if (action === "ai") {
+        stopSpinner(true, "AI models");
+        const models = await apiGet("/ai/models");
+        printAIModels(models);
+        showNextSteps([
+          { cmd: "tm ai topup 10", desc: "add $10 credits" },
+          { cmd: "tm ai run <model> <prompt>", desc: "run an AI model" }
+        ]);
+        return;
+      } else {
+        products = await apiGet(`/products/category/${action}`);
+      }
+      
+      stopSpinner(true, `Found ${products.length} products`);
+      
+      if (products.length > 0) {
+        const rows = products.slice(0, 5).map(pickProductFields);
+        printTable(rows, [
+          { key: "id", title: "ID" },
+          { key: "name", title: "Name" },
+          { key: "price", title: "Price" },
+          { key: "category", title: "Category" }
+        ]);
+      }
+      
+      showNextSteps([
+        { cmd: "tm view <id>", desc: "view product details" },
+        { cmd: "tm add <id>", desc: "add to cart" },
+        { cmd: "tm search <query>", desc: "search products" }
+      ]);
+      
+    } catch (e) {
+      stopSpinner(false, "Failed to load");
+      printError(e?.message || String(e));
+    }
+  });
+
+program
   .command("help [command]")
   .description("Show help for a command")
   .action((commandName) => {
@@ -1621,5 +1753,6 @@ program
 program.parse(process.argv);
 
 if (!process.argv.slice(2).length) {
+  showStatusBar();
   showHelp();
 }
