@@ -229,54 +229,86 @@ program
 // -----------------
 // profile command
 // -----------------
-program
+const profile = program
   .command("profile")
-  .description("View or edit your profile")
-  .argument("[field]", "Field to set (name, phone, address, city, country)")
-  .argument("[value...]", "Value to set")
-  .action(async (field, value) => {
+  .description("View or edit your profile");
+
+async function showProfile() {
+  const result = await apiGet("/auth/status");
+  if (!result.isAuthenticated) {
+    console.log(chalk.yellow("Not logged in. Use 'tm login' first."));
+    return;
+  }
+  const user = result.user;
+  console.log();
+  console.log(chalk.green.bold('┌─────────────────────────────────────┐'));
+  console.log(chalk.green.bold('│') + chalk.white.bold('  Your Profile') + ' '.repeat(22) + chalk.green.bold('│'));
+  console.log(chalk.green.bold('└─────────────────────────────────────┘'));
+  console.log();
+  console.log(`  ${chalk.dim('Username:')}  ${chalk.white(user.username || user.email?.split('@')[0] || '-')}`);
+  console.log(`  ${chalk.dim('Email:')}     ${chalk.cyan(user.email || '-')}`);
+  console.log(`  ${chalk.dim('Name:')}      ${user.name || chalk.dim('(not set)')}`);
+  console.log(`  ${chalk.dim('Phone:')}     ${user.phone || chalk.dim('(not set)')}`);
+  console.log(`  ${chalk.dim('Address:')}   ${user.address || chalk.dim('(not set)')}`);
+  console.log(`  ${chalk.dim('City:')}      ${user.city || chalk.dim('(not set)')}`);
+  console.log(`  ${chalk.dim('Country:')}   ${user.country || chalk.dim('(not set)')}`);
+  console.log();
+  console.log(chalk.dim('  Use: tm profile set <field> <value>'));
+  console.log();
+}
+
+async function setProfileField(field, value) {
+  const result = await apiGet("/auth/status");
+  if (!result.isAuthenticated) {
+    console.log(chalk.yellow("Not logged in. Use 'tm login' first."));
+    return;
+  }
+  const validFields = ["name", "phone", "address", "city", "country"];
+  if (!validFields.includes(field)) {
+    console.error(chalk.red(`✗ Invalid field. Valid fields: ${validFields.join(", ")}`));
+    return;
+  }
+  const newValue = value.join(" ");
+  if (!newValue) {
+    console.error(chalk.red("✗ Value is required."));
+    return;
+  }
+  await apiPatch("/profile", { [field]: newValue });
+  console.log(chalk.green(`✓ Updated ${field} to "${newValue}"`));
+}
+
+profile
+  .command("view")
+  .description("Show your profile")
+  .action(async () => {
     try {
-      const result = await apiGet("/auth/status");
-      
-      if (!result.isAuthenticated) {
-        console.log(chalk.yellow("Not logged in. Use 'tm login' first."));
-        return;
-      }
-      
-      if (!field) {
-        const user = result.user;
-        console.log(chalk.bold("Your Profile"));
-        console.log("");
-        console.log(`${chalk.dim("name:")} ${user.name || "(not set)"}`);
-        console.log(`${chalk.dim("email:")} ${user.email}`);
-        console.log(`${chalk.dim("phone:")} ${user.phone || "(not set)"}`);
-        console.log(`${chalk.dim("address:")} ${user.address || "(not set)"}`);
-        console.log(`${chalk.dim("city:")} ${user.city || "(not set)"}`);
-        console.log(`${chalk.dim("country:")} ${user.country || "(not set)"}`);
-        console.log("");
-        console.log(chalk.dim("To update: tm profile <field> <value>"));
-        return;
-      }
-      
-      const validFields = ["name", "phone", "address", "city", "country"];
-      if (!validFields.includes(field)) {
-        console.error(chalk.red(`Invalid field. Valid fields: ${validFields.join(", ")}`));
-        return;
-      }
-      
-      const newValue = value.join(" ");
-      if (!newValue) {
-        console.error(chalk.red("Value is required."));
-        return;
-      }
-      
-      await apiPatch("/profile", { [field]: newValue });
-      console.log(chalk.green(`Updated ${field} to "${newValue}"`));
+      await showProfile();
     } catch (e) {
       console.error(chalk.red(e?.message || String(e)));
       process.exitCode = 1;
     }
   });
+
+profile
+  .command("set <field> [value...]")
+  .description("Update profile field (name, phone, address, city, country)")
+  .action(async (field, value) => {
+    try {
+      await setProfileField(field, value);
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+      process.exitCode = 1;
+    }
+  });
+
+profile.action(async () => {
+  try {
+    await showProfile();
+  } catch (e) {
+    console.error(chalk.red(e?.message || String(e)));
+    process.exitCode = 1;
+  }
+});
 
 // -----------------
 // cart commands
@@ -1385,11 +1417,15 @@ program
   .command("about")
   .description("About TerminalMarket")
   .action(() => {
+    const W = 40;
+    const line = '═'.repeat(W);
+    const pad = (s, w) => s + ' '.repeat(Math.max(0, w - s.length));
+    
     console.log();
-    console.log(chalk.green.bold('  ╔══════════════════════════════════════════════╗'));
-    console.log(chalk.green.bold('  ║') + chalk.white.bold('          TERMINAL MARKET') + chalk.green.bold('                   ║'));
-    console.log(chalk.green.bold('  ║') + chalk.dim('    The marketplace for developers') + chalk.green.bold('            ║'));
-    console.log(chalk.green.bold('  ╚══════════════════════════════════════════════╝'));
+    console.log(chalk.green.bold('  ╔' + line + '╗'));
+    console.log(chalk.green.bold('  ║') + chalk.white.bold(pad('       TERMINAL MARKET', W)) + chalk.green.bold('║'));
+    console.log(chalk.green.bold('  ║') + chalk.dim(pad('   The marketplace for developers', W)) + chalk.green.bold('║'));
+    console.log(chalk.green.bold('  ╚' + line + '╝'));
     console.log();
     console.log(chalk.white('  We connect developers with premium services:'));
     console.log();
@@ -1404,7 +1440,7 @@ program
     console.log();
     console.log(`  ${chalk.dim('Website:')}  ${chalk.cyan('https://terminalmarket.app')}`);
     console.log(`  ${chalk.dim('Install:')}  ${chalk.green('npm i -g terminalmarket')}`);
-    console.log(`  ${chalk.dim('Version:')}  ${chalk.white('0.7.1')}`);
+    console.log(`  ${chalk.dim('Version:')}  ${chalk.white('0.7.2')}`);
     console.log();
   });
 
@@ -1485,14 +1521,14 @@ function showHelp(commandName = null) {
   }
   
   // Show all commands grouped
-  const W = 35;
+  const W = 38;
   const line = '═'.repeat(W);
   const pad = (s, w) => s + ' '.repeat(Math.max(0, w - s.length));
   
   console.log();
   console.log(chalk.green.bold('  ╔' + line + '╗'));
-  console.log(chalk.green.bold('  ║') + chalk.white.bold(pad(' TerminalMarket CLI ', W - 6)) + chalk.dim('v0.7.1') + chalk.green.bold('║'));
-  console.log(chalk.green.bold('  ║') + chalk.dim(pad(' Marketplace for developers', W)) + chalk.green.bold('║'));
+  console.log(chalk.green.bold('  ║') + chalk.white.bold(pad('  TerminalMarket CLI', W - 8)) + chalk.dim(' v0.7.2 ') + chalk.green.bold('║'));
+  console.log(chalk.green.bold('  ║') + chalk.dim(pad('  Marketplace for developers', W)) + chalk.green.bold('║'));
   console.log(chalk.green.bold('  ╚' + line + '╝'));
   console.log();
   console.log(chalk.magenta.bold('Usage:'), chalk.green('tm'), chalk.cyan('<command>'), chalk.dim('[options]'));
