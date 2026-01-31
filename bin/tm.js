@@ -1717,10 +1717,10 @@ program
     showHelp(commandName);
   });
 
-// Handle no args - show beautiful help
+// Handle no args - show beautiful welcome screen
 if (process.argv.length <= 2) {
   showStatusBar();
-  showHelp();
+  showWelcome(VERSION);
   process.exit(0);
 }
 
