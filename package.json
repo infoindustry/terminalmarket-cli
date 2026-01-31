@@ -1,35 +1,51 @@
 {
   "name": "terminalmarket",
   "version": "0.7.2",
-  "description": "TerminalMarket CLI — marketplace for developers (client for terminalmarket.app)",
+  "description": "TerminalMarket CLI — a curated marketplace for developers & founders (client for terminalmarket.app)",
   "bin": {
     "tm": "bin/tm.js"
   },
   "type": "module",
   "keywords": [
     "cli",
-    "marketplace",
     "terminal",
+    "marketplace",
     "developers",
+    "founders",
     "food",
     "subscription",
     "saas",
-    "coworking"
+    "coworking",
+    "tools",
+    "telegram",
+    "discord"
   ],
   "author": "TerminalMarket",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/terminalmarket/cli"
+    "url": "git+https://github.com/terminalmarket/cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/terminalmarket/cli/issues"
   },
   "homepage": "https://terminalmarket.app",
+  "files": [
+    "bin/",
+    "src/",
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "bundle:cli": "esbuild bin/tm.js --bundle --platform=node --format=cjs --outfile=dist/tm.cjs",
-    "build:bin": "npm run bundle:cli && pkg dist/tm.cjs --targets node18-linux-x64,node18-macos-x64,node18-macos-arm64 --output dist/tm",
+    "build:bin": "npm run bundle:cli && pkg dist/tm.cjs --targets node18-linux-x64,node18-macos-x64,node18-macos-arm64,node18-win-x64 --output dist/tm",
     "build:bin:linux": "npm run bundle:cli && pkg dist/tm.cjs --targets node18-linux-x64 --output dist/tm",
-    "build:bin:macos": "npm run bundle:cli && pkg dist/tm.cjs --targets node18-macos-x64,node18-macos-arm64 --output dist/tm",
+    "build:bin:mac": "npm run bundle:cli && pkg dist/tm.cjs --targets node18-macos-x64,node18-macos-arm64 --output dist/tm",
     "build:bin:win": "npm run bundle:cli && pkg dist/tm.cjs --targets node18-win-x64 --output dist/tm",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "prepack": "npm run clean",
+    "test:smoke": "node bin/tm.js --help"
   },
   "devDependencies": {
     "esbuild": "^0.25.0",
