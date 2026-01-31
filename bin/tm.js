@@ -1552,33 +1552,48 @@ program
 // help
 // -----------------
 
+// Command groups for organized help
+const commandGroups = {
+  'Authentication': ['login', 'logout', 'register', 'auth', 'github', 'whoami', 'profile'],
+  'Shopping': ['products', 'search', 'view', 'open', 'buy', 'categories', 'category'],
+  'Cart & Orders': ['cart', 'add', 'checkout', 'orders'],
+  'Stores': ['sellers', 'seller', 'store', 'reviews', 'review', 'where'],
+  'AI Services': ['ai', 'credits', 'topup'],
+  'Personalization': ['alias', 'aliases', 'reward', 'rewards'],
+  'System': ['config', 'help', 'about', 'offers']
+};
+
 // Custom help formatter
 function showHelp(commandName = null) {
   if (commandName) {
     // Show detailed help for specific command
     const cmd = program.commands.find(c => c.name() === commandName);
     if (!cmd) {
-      console.log(chalk.red(`Unknown command: ${commandName}`));
+      console.log(chalk.red(`✗ Unknown command: ${commandName}`));
       console.log(chalk.dim(`Run 'tm help' to see all commands.`));
       return;
     }
     
     console.log();
-    console.log(chalk.green.bold(`tm ${cmd.name()}`), chalk.dim(`- ${cmd.description()}`));
+    console.log(chalk.cyan('━'.repeat(50)));
+    console.log(chalk.green.bold(`  tm ${cmd.name()}`));
+    console.log(chalk.white(`  ${cmd.description()}`));
+    console.log(chalk.cyan('━'.repeat(50)));
     console.log();
     
     // Show usage
     const args = cmd.registeredArguments || [];
-    const argsStr = args.map(a => a.required ? `<${a.name()}>` : `[${a.name()}]`).join(' ');
-    console.log(chalk.yellow('Usage:'));
-    console.log(`  tm ${cmd.name()}${argsStr ? ' ' + argsStr : ''} [options]`);
+    const argsStr = args.map(a => a.required ? chalk.yellow(`<${a.name()}>`) : chalk.dim(`[${a.name()}]`)).join(' ');
+    console.log(chalk.magenta.bold('Usage:'));
+    console.log(`  ${chalk.green('tm')} ${chalk.cyan(cmd.name())}${argsStr ? ' ' + argsStr : ''} ${chalk.dim('[options]')}`);
     console.log();
     
     // Show arguments
     if (args.length > 0) {
-      console.log(chalk.yellow('Arguments:'));
+      console.log(chalk.magenta.bold('Arguments:'));
       args.forEach(a => {
-        console.log(`  ${a.name().padEnd(15)} ${a.description || (a.required ? '(required)' : '(optional)')}`);
+        const req = a.required ? chalk.yellow('(required)') : chalk.dim('(optional)');
+        console.log(`  ${chalk.cyan(a.name().padEnd(15))} ${req}`);
       });
       console.log();
     }
@@ -1586,61 +1601,97 @@ function showHelp(commandName = null) {
     // Show options
     const opts = cmd.options;
     if (opts.length > 0) {
-      console.log(chalk.yellow('Options:'));
+      console.log(chalk.magenta.bold('Options:'));
       opts.forEach(o => {
-        const flags = o.flags.padEnd(25);
-        console.log(`  ${flags} ${o.description}`);
+        const flags = chalk.yellow(o.flags.padEnd(28));
+        console.log(`  ${flags} ${chalk.white(o.description)}`);
       });
       console.log();
     }
     
     // Show subcommands if any
     if (cmd.commands && cmd.commands.length > 0) {
-      console.log(chalk.yellow('Subcommands:'));
+      console.log(chalk.magenta.bold('Subcommands:'));
       cmd.commands.sort((a, b) => a.name().localeCompare(b.name())).forEach(sub => {
-        const subArgs = (sub.registeredArguments || []).map(a => a.required ? `<${a.name()}>` : `[${a.name()}]`).join(' ');
-        console.log(`  ${(sub.name() + ' ' + subArgs).padEnd(25)} ${sub.description()}`);
+        const subArgs = (sub.registeredArguments || []).map(a => a.required ? chalk.yellow(`<${a.name()}>`) : chalk.dim(`[${a.name()}]`)).join(' ');
+        const cmdPart = chalk.cyan(sub.name()) + (subArgs ? ' ' + subArgs : '');
+        console.log(`  ${cmdPart.padEnd(40)} ${chalk.white(sub.description())}`);
       });
       console.log();
-      console.log(chalk.dim(`Run 'tm ${cmd.name()} <subcommand> help' for more details.`));
+      console.log(chalk.dim(`  💡 Run 'tm ${cmd.name()} <subcommand> help' for more details.`));
     }
+    console.log();
     return;
   }
   
-  // Show all commands
+  // Show all commands grouped
   console.log();
-  console.log(chalk.green.bold('TerminalMarket CLI') + chalk.dim(' v0.6.3'));
-  console.log(chalk.dim('Marketplace for developers'));
+  console.log(chalk.green.bold('  ╔════════════════════════════════════════╗'));
+  console.log(chalk.green.bold('  ║') + chalk.white.bold('     TerminalMarket CLI ') + chalk.dim('v0.6.3') + chalk.green.bold('        ║'));
+  console.log(chalk.green.bold('  ║') + chalk.dim('     Marketplace for developers') + chalk.green.bold('        ║'));
+  console.log(chalk.green.bold('  ╚════════════════════════════════════════╝'));
   console.log();
-  console.log(chalk.yellow('Usage:'), 'tm <command> [options]');
+  console.log(chalk.magenta.bold('Usage:'), chalk.green('tm'), chalk.cyan('<command>'), chalk.dim('[options]'));
   console.log();
-  console.log(chalk.yellow('Commands:'));
   
-  // Collect all commands with their args
-  const commands = [];
+  // Collect all commands
+  const allCommands = {};
   program.commands.forEach(cmd => {
     const args = (cmd.registeredArguments || []).map(a => a.required ? `<${a.name()}>` : `[${a.name()}]`).join(' ');
-    commands.push({
+    allCommands[cmd.name()] = {
       name: cmd.name(),
       args,
       desc: cmd.description(),
       hasSubcommands: cmd.commands && cmd.commands.length > 0
+    };
+  });
+  
+  // Display by groups
+  const groupColors = {
+    'Authentication': chalk.blue,
+    'Shopping': chalk.green,
+    'Cart & Orders': chalk.yellow,
+    'Stores': chalk.magenta,
+    'AI Services': chalk.cyan,
+    'Personalization': chalk.white,
+    'System': chalk.gray
+  };
+  
+  const groupIcons = {
+    'Authentication': '🔐',
+    'Shopping': '🛒',
+    'Cart & Orders': '📦',
+    'Stores': '🏪',
+    'AI Services': '🤖',
+    'Personalization': '⚙️',
+    'System': '💻'
+  };
+  
+  for (const [group, cmdNames] of Object.entries(commandGroups)) {
+    const color = groupColors[group] || chalk.white;
+    const icon = groupIcons[group] || '•';
+    
+    console.log(color.bold(`${icon} ${group}`));
+    
+    // Sort commands in group
+    const groupCmds = cmdNames
+      .filter(name => allCommands[name])
+      .map(name => allCommands[name])
+      .sort((a, b) => a.name.localeCompare(b.name));
+    
+    groupCmds.forEach(c => {
+      const cmdName = chalk.cyan(c.name);
+      const cmdArgs = c.args ? chalk.yellow(` ${c.args}`) : '';
+      const cmdStr = (c.name + (c.args ? ' ' + c.args : '')).padEnd(28);
+      const suffix = c.hasSubcommands ? chalk.dim(' ⊕') : '';
+      console.log(`  ${cmdName}${cmdArgs}${' '.repeat(Math.max(0, 28 - c.name.length - (c.args?.length || 0)))} ${chalk.dim(c.desc)}${suffix}`);
     });
-  });
+    console.log();
+  }
   
-  // Sort alphabetically
-  commands.sort((a, b) => a.name.localeCompare(b.name));
-  
-  // Display
-  commands.forEach(c => {
-    const cmdStr = c.args ? `${c.name} ${c.args}` : c.name;
-    const suffix = c.hasSubcommands ? chalk.dim(' (has subcommands)') : '';
-    console.log(`  ${cmdStr.padEnd(30)} ${c.desc}${suffix}`);
-  });
-  
-  console.log();
-  console.log(chalk.dim(`Run 'tm <command> help' for detailed help on a command.`));
-  console.log(chalk.dim(`Run 'tm <command> <subcommand> help' for subcommand help.`));
+  console.log(chalk.cyan('━'.repeat(50)));
+  console.log(chalk.dim(`  💡 Run '`) + chalk.cyan('tm help <command>') + chalk.dim(`' for detailed help`));
+  console.log(chalk.dim(`  ⊕ = has subcommands`));
   console.log();
 }
 
