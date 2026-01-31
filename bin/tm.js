@@ -918,61 +918,6 @@ program
   });
 
 // -----------------
-// where command (location search)
-// -----------------
-program
-  .command("where <city>")
-  .description("Find products and sellers in a city")
-  .option("-c, --country <country>", "Filter by country")
-  .action(async (city, opts) => {
-    try {
-      console.log(chalk.bold(`Services in ${city}`));
-      console.log("");
-      
-      // Search products by city
-      const params = new URLSearchParams();
-      params.set("city", city);
-      if (opts.country) params.set("country", opts.country);
-      
-      const products = await apiGet(`/products?${params.toString()}`);
-      const localProducts = (products || []).filter(p => 
-        p.serviceType === "local" && 
-        p.serviceCity?.toLowerCase() === city.toLowerCase()
-      );
-      
-      if (localProducts.length > 0) {
-        console.log(chalk.cyan("Products:"));
-        localProducts.forEach(p => {
-          console.log(`  ${p.name} - $${p.price} (${p.category})`);
-        });
-        console.log("");
-      }
-      
-      // Search sellers by city
-      const sellers = await apiGet("/sellers");
-      const localSellers = (sellers || []).filter(s => 
-        s.serviceType === "local" && 
-        s.baseCity?.toLowerCase() === city.toLowerCase()
-      );
-      
-      if (localSellers.length > 0) {
-        console.log(chalk.cyan("Sellers:"));
-        localSellers.forEach(s => {
-          console.log(`  ${s.name} (${s.slug})`);
-        });
-      }
-      
-      if (localProducts.length === 0 && localSellers.length === 0) {
-        console.log(chalk.yellow(`No local services found in ${city}.`));
-        console.log(chalk.dim("Try: tm products --city <city>"));
-      }
-    } catch (e) {
-      console.error(chalk.red(e?.message || String(e)));
-      process.exitCode = 1;
-    }
-  });
-
-// -----------------
 // categories
 // -----------------
 program
