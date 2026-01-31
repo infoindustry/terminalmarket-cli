@@ -13,7 +13,7 @@ const program = new Command();
 program
   .name("tm")
   .description("TerminalMarket CLI — marketplace for developers")
-  .version("0.6.1");
+  .version("0.6.2");
 
 // -----------------
 // config
@@ -1136,7 +1136,8 @@ program
 program
   .command("view <productIdOrSlug>")
   .description("View a product by ID or slug")
-  .action(async (productIdOrSlug) => {
+  .option("-i, --image", "Open product image in browser")
+  .action(async (productIdOrSlug, opts) => {
     try {
       let p = await apiGet(`/products/${encodeURIComponent(productIdOrSlug)}`).catch(() => null);
       
@@ -1147,6 +1148,23 @@ program
       if (!p) {
         console.error(chalk.red("Product not found"));
         process.exitCode = 1;
+        return;
+      }
+      
+      // If --image flag, open image and exit
+      if (opts.image) {
+        const imageUrl = p.imageUrl || p.image;
+        if (imageUrl) {
+          console.log(chalk.green("Opening image..."));
+          try {
+            await open(imageUrl);
+          } catch {
+            console.log(chalk.yellow("Could not open browser. Image URL:"));
+            console.log(imageUrl);
+          }
+        } else {
+          console.log(chalk.yellow("No image available for this product."));
+        }
         return;
       }
       
@@ -1180,6 +1198,14 @@ program
         console.log(`${chalk.dim("country:")} ${p.serviceCountry}`);
       }
       
+      // Show image URL if available
+      const imageUrl = p.imageUrl || p.image;
+      if (imageUrl) {
+        console.log("");
+        console.log(`${chalk.dim("image:")} ${imageUrl}`);
+        console.log(chalk.dim(`Use: tm view ${p.slug || p.id} --image`));
+      }
+      
       if (p.buyUrl) console.log(`${chalk.dim("buyUrl:")} ${p.buyUrl}`);
       if (p.subscriptionAvailable) console.log(`${chalk.dim("subscription:")} ${chalk.green("available")}`);
       if (p.tags && p.tags.length > 0) console.log(`${chalk.dim("tags:")} ${p.tags.join(", ")}`);
@@ -1197,6 +1223,50 @@ program
           });
         }
       } catch {
+      }
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+      process.exitCode = 1;
+    }
+  });
+
+// Open product page or image in browser
+program
+  .command("open <productIdOrSlug>")
+  .description("Open product page or image in browser")
+  .option("-i, --image", "Open product image instead of page")
+  .action(async (productIdOrSlug, opts) => {
+    try {
+      let p = await apiGet(`/products/${encodeURIComponent(productIdOrSlug)}`).catch(() => null);
+      
+      if (!p) {
+        p = await apiGet(`/products/slug/${encodeURIComponent(productIdOrSlug)}`).catch(() => null);
+      }
+      
+      if (!p) {
+        console.error(chalk.red("Product not found"));
+        process.exitCode = 1;
+        return;
+      }
+      
+      let url;
+      if (opts.image) {
+        url = p.imageUrl || p.image;
+        if (!url) {
+          console.log(chalk.yellow("No image available for this product."));
+          return;
+        }
+      } else {
+        // Open product page or buyUrl
+        url = p.buyUrl || `${getApiBase().replace('/api', '')}/product/${p.slug || p.id}`;
+      }
+      
+      console.log(chalk.green("Opening:"), url);
+      try {
+        await open(url);
+      } catch {
+        console.log(chalk.yellow("Could not open browser. URL:"));
+        console.log(url);
       }
     } catch (e) {
       console.error(chalk.red(e?.message || String(e)));
