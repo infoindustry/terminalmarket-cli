@@ -63,7 +63,7 @@ const program = new Command();
 program
   .name("tm")
   .description("TerminalMarket CLI — marketplace for developers")
-  .version("0.6.3");
+  .version("0.7.0");
 
 // -----------------
 // config
@@ -1385,12 +1385,27 @@ program
   .command("about")
   .description("About TerminalMarket")
   .action(() => {
-    console.log(chalk.bold("TerminalMarket"));
-    console.log("The marketplace for developers who prefer the command line.\n");
-    console.log("We connect developers with premium services: coffee subscriptions,");
-    console.log("healthy snacks, coworking spaces, productivity tools, and more.\n");
-    console.log(chalk.dim("Website: https://terminalmarket.app"));
-    console.log(chalk.dim("CLI:     npm i -g terminalmarket"));
+    console.log();
+    console.log(chalk.green.bold('  ╔══════════════════════════════════════════════╗'));
+    console.log(chalk.green.bold('  ║') + chalk.white.bold('          TERMINAL MARKET') + chalk.green.bold('                   ║'));
+    console.log(chalk.green.bold('  ║') + chalk.dim('    The marketplace for developers') + chalk.green.bold('            ║'));
+    console.log(chalk.green.bold('  ╚══════════════════════════════════════════════╝'));
+    console.log();
+    console.log(chalk.white('  We connect developers with premium services:'));
+    console.log();
+    console.log(chalk.cyan('    ☕') + chalk.white(' Coffee subscriptions'));
+    console.log(chalk.cyan('    🥗') + chalk.white(' Healthy snacks & lunch'));
+    console.log(chalk.cyan('    💆') + chalk.white(' Health & wellness services'));
+    console.log(chalk.cyan('    🏢') + chalk.white(' Coworking spaces'));
+    console.log(chalk.cyan('    🤖') + chalk.white(' AI services & tools'));
+    console.log(chalk.cyan('    ⚡') + chalk.white(' Productivity tools'));
+    console.log();
+    console.log(chalk.dim('  ─────────────────────────────────────────────'));
+    console.log();
+    console.log(`  ${chalk.dim('Website:')}  ${chalk.cyan('https://terminalmarket.app')}`);
+    console.log(`  ${chalk.dim('Install:')}  ${chalk.green('npm i -g terminalmarket')}`);
+    console.log(`  ${chalk.dim('Version:')}  ${chalk.white('0.7.0')}`);
+    console.log();
   });
 
 // -----------------
@@ -1472,7 +1487,7 @@ function showHelp(commandName = null) {
   // Show all commands grouped
   console.log();
   console.log(chalk.green.bold('  ╔════════════════════════════════════════╗'));
-  console.log(chalk.green.bold('  ║') + chalk.white.bold('     TerminalMarket CLI ') + chalk.dim('v0.6.3') + chalk.green.bold('        ║'));
+  console.log(chalk.green.bold('  ║') + chalk.white.bold('     TerminalMarket CLI ') + chalk.dim('v0.7.0') + chalk.green.bold('        ║'));
   console.log(chalk.green.bold('  ║') + chalk.dim('     Marketplace for developers') + chalk.green.bold('        ║'));
   console.log(chalk.green.bold('  ╚════════════════════════════════════════╝'));
   console.log();
