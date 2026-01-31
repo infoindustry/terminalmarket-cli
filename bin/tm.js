@@ -3,17 +3,63 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import open from "open";
+import readline from "readline";
 
 import { apiGet, apiPost, apiDelete, apiPatch } from "../src/api.js";
 import { getApiBase, setApiBase, getUser, setUser, clearUser, clearSession } from "../src/config.js";
 import { printTable, pickProductFields, pickSellerFields, pickOfferFields, containsQuery, formatStars } from "../src/format.js";
+
+// Helper for hidden password input
+function askPassword(prompt = "Password: ") {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    
+    process.stdout.write(prompt);
+    
+    // Mute output
+    const stdin = process.stdin;
+    const wasRaw = stdin.isRaw;
+    if (stdin.isTTY) {
+      stdin.setRawMode(true);
+    }
+    
+    let password = "";
+    
+    const onData = (char) => {
+      const c = char.toString();
+      
+      if (c === "\n" || c === "\r") {
+        stdin.removeListener("data", onData);
+        if (stdin.isTTY) {
+          stdin.setRawMode(wasRaw);
+        }
+        rl.close();
+        console.log(); // New line
+        resolve(password);
+      } else if (c === "\u0003") {
+        // Ctrl+C
+        process.exit();
+      } else if (c === "\u007F" || c === "\b") {
+        // Backspace
+        password = password.slice(0, -1);
+      } else {
+        password += c;
+      }
+    };
+    
+    stdin.on("data", onData);
+  });
+}
 
 const program = new Command();
 
 program
   .name("tm")
   .description("TerminalMarket CLI — marketplace for developers")
-  .version("0.6.2");
+  .version("0.6.3");
 
 // -----------------
 // config
@@ -51,12 +97,13 @@ config
 // auth commands
 // -----------------
 program
-  .command("register <email> <password>")
-  .description("Create a new account")
+  .command("register <email> [password]")
+  .description("Create a new account (password will be prompted securely)")
   .option("-n, --name <name>", "Your name")
   .option("-u, --username <username>", "Username")
-  .action(async (email, password, opts) => {
+  .action(async (email, passwordArg, opts) => {
     try {
+      const password = passwordArg || await askPassword();
       const username = opts.username || email.split("@")[0];
       const result = await apiPost("/auth/register", {
         email,
@@ -79,10 +126,11 @@ program
   });
 
 program
-  .command("login <email> <password>")
-  .description("Login to your account")
-  .action(async (email, password) => {
+  .command("login <email> [password]")
+  .description("Login to your account (password will be prompted securely)")
+  .action(async (email, passwordArg) => {
     try {
+      const password = passwordArg || await askPassword();
       const result = await apiPost("/auth/login", { email, password });
       
       if (result.user) {
