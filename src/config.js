@@ -36,3 +36,19 @@ export function setUser(user) {
 export function clearUser() {
   conf.delete("user");
 }
+
+export function isFirstRun() {
+  return !conf.get("firstRunComplete", false);
+}
+
+export function markFirstRunComplete() {
+  conf.set("firstRunComplete", true);
+}
+
+export function getLocation() {
+  return conf.get("location", null);
+}
+
+export function setLocation(city, country = null) {
+  conf.set("location", { city, country });
+}
