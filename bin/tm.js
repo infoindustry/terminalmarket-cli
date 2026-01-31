@@ -1453,8 +1453,22 @@ const commandGroups = {
   'System': ['start', 'doctor', 'config', 'help', 'about']
 };
 
+// Command groups by level
+const basicGroups = {
+  'Get Started': ['start', 'where', 'doctor'],
+  'Shop': ['featured', 'deals', 'products', 'search', 'buy', 'view'],
+  'Account': ['login', 'register', 'whoami', 'profile']
+};
+
+const advancedGroups = {
+  'Cart & Orders': ['cart', 'add', 'checkout', 'orders'],
+  'AI Services': ['ai', 'credits', 'topup'],
+  'Stores': ['sellers', 'store', 'reviews'],
+  'Automation': ['alias', 'reward']
+};
+
 // Custom help formatter
-function showHelp(commandName = null) {
+function showHelp(commandName = null, mode = 'basic') {
   if (commandName) {
     // Show detailed help for specific command
     const cmd = program.commands.find(c => c.name() === commandName);
@@ -1514,28 +1528,6 @@ function showHelp(commandName = null) {
     return;
   }
   
-  // Show all commands grouped
-  const W = 38;
-  const line = '═'.repeat(W);
-  const pad = (s, w) => s + ' '.repeat(Math.max(0, w - s.length));
-  
-  console.log();
-  console.log(chalk.green.bold('  ╔' + line + '╗'));
-  console.log(chalk.green.bold('  ║') + chalk.white.bold(pad('  TerminalMarket CLI', W - 8)) + chalk.dim(` v${VERSION} `) + chalk.green.bold('║'));
-  console.log(chalk.green.bold('  ║') + chalk.dim(pad('  Marketplace for developers', W)) + chalk.green.bold('║'));
-  console.log(chalk.green.bold('  ╚' + line + '╝'));
-  console.log();
-  console.log(chalk.magenta.bold('Usage:'), chalk.green('tm'), chalk.cyan('<command>'), chalk.dim('[options]'));
-  console.log();
-  
-  // Quick Start section
-  console.log(chalk.yellow.bold('Quick Start:'));
-  console.log(`  ${chalk.green('tm start')}              ${chalk.dim('interactive onboarding')}`);
-  console.log(`  ${chalk.green('tm where berlin')}       ${chalk.dim('set your location')}`);
-  console.log(`  ${chalk.green('tm featured')}           ${chalk.dim('see top picks')}`);
-  console.log(`  ${chalk.green('tm buy <id>')}           ${chalk.dim('purchase a product')}`);
-  console.log();
-  
   // Collect all commands
   const allCommands = {};
   program.commands.forEach(cmd => {
@@ -1543,46 +1535,20 @@ function showHelp(commandName = null) {
     allCommands[cmd.name()] = {
       name: cmd.name(),
       args,
-      desc: cmd.description(),
-      hasSubcommands: cmd.commands && cmd.commands.length > 0
+      desc: cmd.description()
     };
   });
   
-  // Display by groups
-  const groupColors = {
-    'Authentication': chalk.blue,
-    'Shopping': chalk.green,
-    'Cart & Orders': chalk.yellow,
-    'Stores': chalk.magenta,
-    'AI Services': chalk.cyan,
-    'Personalization': chalk.white,
-    'System': chalk.gray
-  };
+  const COL_WIDTH = 28;
   
-  const groupIcons = {
-    'Authentication': '🔐',
-    'Shopping': '🛒',
-    'Cart & Orders': '📦',
-    'Stores': '🏪',
-    'AI Services': '🤖',
-    'Personalization': '⚙️',
-    'System': '💻'
-  };
-  
-  const COL_WIDTH = 32;
-  
-  for (const [group, cmdNames] of Object.entries(commandGroups)) {
-    const color = groupColors[group] || chalk.white;
-    const icon = groupIcons[group] || '•';
-    
-    console.log(color.bold(`${icon} ${group}`));
-    
-    // Sort commands in group
+  const printGroup = (groupName, cmdNames, icon, color) => {
     const groupCmds = cmdNames
       .filter(name => allCommands[name])
-      .map(name => allCommands[name])
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .map(name => allCommands[name]);
     
+    if (groupCmds.length === 0) return;
+    
+    console.log(color.bold(`${icon} ${groupName}`));
     groupCmds.forEach(c => {
       const rawCmd = c.name + (c.args ? ' ' + c.args : '');
       console.log('  ' + chalk.cyan(c.name) + (c.args ? chalk.yellow(' ' + c.args) : '') + 
@@ -1590,11 +1556,79 @@ function showHelp(commandName = null) {
                   chalk.dim(c.desc));
     });
     console.log();
-  }
+  };
   
-  console.log(chalk.dim('─'.repeat(50)));
-  console.log(chalk.dim("  💡 tm help <command>") + chalk.dim(" — detailed help"));
   console.log();
+  console.log(chalk.green.bold('  TerminalMarket') + chalk.dim(` v${VERSION}`));
+  console.log(chalk.dim('  The marketplace for developers'));
+  console.log();
+  
+  if (mode === 'basic') {
+    // Simple, selling help
+    console.log(chalk.yellow.bold('Quick Start:'));
+    console.log(`  ${chalk.green('tm start')}            ${chalk.dim('interactive onboarding')}`);
+    console.log(`  ${chalk.green('tm where <city>')}     ${chalk.dim('set your location')}`);
+    console.log(`  ${chalk.green('tm featured')}         ${chalk.dim('top picks this week')}`);
+    console.log(`  ${chalk.green('tm buy <id>')}         ${chalk.dim('purchase a product')}`);
+    console.log();
+    
+    printGroup('Shop', ['featured', 'deals', 'search', 'products'], '🛒', chalk.green);
+    printGroup('Account', ['login', 'register', 'profile'], '👤', chalk.blue);
+    printGroup('Help', ['doctor', 'help'], '💡', chalk.gray);
+    
+    console.log(chalk.dim('─'.repeat(45)));
+    console.log(chalk.dim('  tm help --advanced') + chalk.dim('  cart, AI, rewards'));
+    console.log(chalk.dim('  tm help --all') + chalk.dim('       full command list'));
+    console.log();
+    
+  } else if (mode === 'advanced') {
+    // Advanced features
+    console.log(chalk.yellow.bold('Advanced Features:'));
+    console.log();
+    
+    printGroup('Cart & Orders', ['cart', 'add', 'checkout', 'orders'], '📦', chalk.yellow);
+    printGroup('AI Services', ['ai', 'credits', 'topup'], '🤖', chalk.cyan);
+    printGroup('Stores', ['sellers', 'store', 'reviews'], '🏪', chalk.magenta);
+    printGroup('Automation', ['alias', 'reward'], '⚙️', chalk.white);
+    
+    console.log(chalk.dim('─'.repeat(45)));
+    console.log(chalk.dim('  tm help') + chalk.dim('            basic commands'));
+    console.log(chalk.dim('  tm help --all') + chalk.dim('       full list'));
+    console.log();
+    
+  } else {
+    // Full list (--all)
+    console.log(chalk.magenta.bold('Usage:'), chalk.green('tm'), chalk.cyan('<command>'), chalk.dim('[options]'));
+    console.log();
+    
+    const groupColors = {
+      'Authentication': chalk.blue,
+      'Shopping': chalk.green,
+      'Cart & Orders': chalk.yellow,
+      'Stores': chalk.magenta,
+      'AI Services': chalk.cyan,
+      'Personalization': chalk.white,
+      'System': chalk.gray
+    };
+    
+    const groupIcons = {
+      'Authentication': '🔐',
+      'Shopping': '🛒',
+      'Cart & Orders': '📦',
+      'Stores': '🏪',
+      'AI Services': '🤖',
+      'Personalization': '⚙️',
+      'System': '💻'
+    };
+    
+    for (const [group, cmdNames] of Object.entries(commandGroups)) {
+      printGroup(group, cmdNames, groupIcons[group] || '•', groupColors[group] || chalk.white);
+    }
+    
+    console.log(chalk.dim('─'.repeat(45)));
+    console.log(chalk.dim('  tm help <command>') + chalk.dim('   detailed help'));
+    console.log();
+  }
 }
 
 program
@@ -1868,8 +1902,16 @@ program
 program
   .command("help [command]")
   .description("Show help for a command")
-  .action((commandName) => {
-    showHelp(commandName);
+  .option("-a, --advanced", "Show advanced commands (cart, AI, rewards)")
+  .option("--all", "Show all commands")
+  .action((commandName, opts) => {
+    if (opts.all) {
+      showHelp(null, 'all');
+    } else if (opts.advanced) {
+      showHelp(null, 'advanced');
+    } else {
+      showHelp(commandName, 'basic');
+    }
   });
 
 // Handle no args - show beautiful welcome screen
