@@ -1551,15 +1551,108 @@ program
 // -----------------
 // help
 // -----------------
+
+// Custom help formatter
+function showHelp(commandName = null) {
+  if (commandName) {
+    // Show detailed help for specific command
+    const cmd = program.commands.find(c => c.name() === commandName);
+    if (!cmd) {
+      console.log(chalk.red(`Unknown command: ${commandName}`));
+      console.log(chalk.dim(`Run 'tm help' to see all commands.`));
+      return;
+    }
+    
+    console.log();
+    console.log(chalk.green.bold(`tm ${cmd.name()}`), chalk.dim(`- ${cmd.description()}`));
+    console.log();
+    
+    // Show usage
+    const args = cmd.registeredArguments || [];
+    const argsStr = args.map(a => a.required ? `<${a.name()}>` : `[${a.name()}]`).join(' ');
+    console.log(chalk.yellow('Usage:'));
+    console.log(`  tm ${cmd.name()}${argsStr ? ' ' + argsStr : ''} [options]`);
+    console.log();
+    
+    // Show arguments
+    if (args.length > 0) {
+      console.log(chalk.yellow('Arguments:'));
+      args.forEach(a => {
+        console.log(`  ${a.name().padEnd(15)} ${a.description || (a.required ? '(required)' : '(optional)')}`);
+      });
+      console.log();
+    }
+    
+    // Show options
+    const opts = cmd.options;
+    if (opts.length > 0) {
+      console.log(chalk.yellow('Options:'));
+      opts.forEach(o => {
+        const flags = o.flags.padEnd(25);
+        console.log(`  ${flags} ${o.description}`);
+      });
+      console.log();
+    }
+    
+    // Show subcommands if any
+    if (cmd.commands && cmd.commands.length > 0) {
+      console.log(chalk.yellow('Subcommands:'));
+      cmd.commands.sort((a, b) => a.name().localeCompare(b.name())).forEach(sub => {
+        const subArgs = (sub.registeredArguments || []).map(a => a.required ? `<${a.name()}>` : `[${a.name()}]`).join(' ');
+        console.log(`  ${(sub.name() + ' ' + subArgs).padEnd(25)} ${sub.description()}`);
+      });
+      console.log();
+      console.log(chalk.dim(`Run 'tm ${cmd.name()} <subcommand> help' for more details.`));
+    }
+    return;
+  }
+  
+  // Show all commands
+  console.log();
+  console.log(chalk.green.bold('TerminalMarket CLI') + chalk.dim(' v0.6.3'));
+  console.log(chalk.dim('Marketplace for developers'));
+  console.log();
+  console.log(chalk.yellow('Usage:'), 'tm <command> [options]');
+  console.log();
+  console.log(chalk.yellow('Commands:'));
+  
+  // Collect all commands with their args
+  const commands = [];
+  program.commands.forEach(cmd => {
+    const args = (cmd.registeredArguments || []).map(a => a.required ? `<${a.name()}>` : `[${a.name()}]`).join(' ');
+    commands.push({
+      name: cmd.name(),
+      args,
+      desc: cmd.description(),
+      hasSubcommands: cmd.commands && cmd.commands.length > 0
+    });
+  });
+  
+  // Sort alphabetically
+  commands.sort((a, b) => a.name.localeCompare(b.name));
+  
+  // Display
+  commands.forEach(c => {
+    const cmdStr = c.args ? `${c.name} ${c.args}` : c.name;
+    const suffix = c.hasSubcommands ? chalk.dim(' (has subcommands)') : '';
+    console.log(`  ${cmdStr.padEnd(30)} ${c.desc}${suffix}`);
+  });
+  
+  console.log();
+  console.log(chalk.dim(`Run 'tm <command> help' for detailed help on a command.`));
+  console.log(chalk.dim(`Run 'tm <command> <subcommand> help' for subcommand help.`));
+  console.log();
+}
+
 program
-  .command("help")
-  .description("Show help")
-  .action(() => {
-    program.outputHelp();
+  .command("help [command]")
+  .description("Show help for a command")
+  .action((commandName) => {
+    showHelp(commandName);
   });
 
 program.parse(process.argv);
 
 if (!process.argv.slice(2).length) {
-  program.outputHelp();
+  showHelp();
 }
