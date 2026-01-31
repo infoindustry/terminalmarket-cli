@@ -1404,7 +1404,7 @@ program
     console.log();
     console.log(`  ${chalk.dim('Website:')}  ${chalk.cyan('https://terminalmarket.app')}`);
     console.log(`  ${chalk.dim('Install:')}  ${chalk.green('npm i -g terminalmarket')}`);
-    console.log(`  ${chalk.dim('Version:')}  ${chalk.white('0.7.0')}`);
+    console.log(`  ${chalk.dim('Version:')}  ${chalk.white('0.7.1')}`);
     console.log();
   });
 
@@ -1485,11 +1485,15 @@ function showHelp(commandName = null) {
   }
   
   // Show all commands grouped
+  const W = 35;
+  const line = '═'.repeat(W);
+  const pad = (s, w) => s + ' '.repeat(Math.max(0, w - s.length));
+  
   console.log();
-  console.log(chalk.green.bold('  ╔════════════════════════════════════════╗'));
-  console.log(chalk.green.bold('  ║') + chalk.white.bold('     TerminalMarket CLI ') + chalk.dim('v0.7.0') + chalk.green.bold('        ║'));
-  console.log(chalk.green.bold('  ║') + chalk.dim('     Marketplace for developers') + chalk.green.bold('        ║'));
-  console.log(chalk.green.bold('  ╚════════════════════════════════════════╝'));
+  console.log(chalk.green.bold('  ╔' + line + '╗'));
+  console.log(chalk.green.bold('  ║') + chalk.white.bold(pad(' TerminalMarket CLI ', W - 6)) + chalk.dim('v0.7.1') + chalk.green.bold('║'));
+  console.log(chalk.green.bold('  ║') + chalk.dim(pad(' Marketplace for developers', W)) + chalk.green.bold('║'));
+  console.log(chalk.green.bold('  ╚' + line + '╝'));
   console.log();
   console.log(chalk.magenta.bold('Usage:'), chalk.green('tm'), chalk.cyan('<command>'), chalk.dim('[options]'));
   console.log();
@@ -1527,6 +1531,8 @@ function showHelp(commandName = null) {
     'System': '💻'
   };
   
+  const COL_WIDTH = 32;
+  
   for (const [group, cmdNames] of Object.entries(commandGroups)) {
     const color = groupColors[group] || chalk.white;
     const icon = groupIcons[group] || '•';
@@ -1540,18 +1546,19 @@ function showHelp(commandName = null) {
       .sort((a, b) => a.name.localeCompare(b.name));
     
     groupCmds.forEach(c => {
-      const cmdName = chalk.cyan(c.name);
-      const cmdArgs = c.args ? chalk.yellow(` ${c.args}`) : '';
-      const cmdStr = (c.name + (c.args ? ' ' + c.args : '')).padEnd(28);
-      const suffix = c.hasSubcommands ? chalk.dim(' ⊕') : '';
-      console.log(`  ${cmdName}${cmdArgs}${' '.repeat(Math.max(0, 28 - c.name.length - (c.args?.length || 0)))} ${chalk.dim(c.desc)}${suffix}`);
+      const rawCmd = c.name + (c.args ? ' ' + c.args : '');
+      const padded = rawCmd.padEnd(COL_WIDTH);
+      const suffix = c.hasSubcommands ? ' ⊕' : '';
+      console.log('  ' + chalk.cyan(c.name) + (c.args ? chalk.yellow(' ' + c.args) : '') + 
+                  ' '.repeat(Math.max(1, COL_WIDTH - rawCmd.length)) + 
+                  chalk.dim(c.desc) + chalk.dim(suffix));
     });
     console.log();
   }
   
-  console.log(chalk.cyan('━'.repeat(50)));
-  console.log(chalk.dim(`  💡 Run '`) + chalk.cyan('tm help <command>') + chalk.dim(`' for detailed help`));
-  console.log(chalk.dim(`  ⊕ = has subcommands`));
+  console.log(chalk.dim('─'.repeat(60)));
+  console.log(chalk.dim("  💡 Run '") + chalk.cyan('tm help <command>') + chalk.dim("' for detailed help"));
+  console.log(chalk.dim('  ⊕ = has subcommands'));
   console.log();
 }
 
