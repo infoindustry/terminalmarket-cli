@@ -22,11 +22,6 @@ const __dirname = dirname(__filename);
 const pkg = JSON.parse(readFileSync(join(__dirname, "../package.json"), "utf-8"));
 const VERSION = pkg.version;
 
-if (isFirstRun() && process.argv.length <= 2) {
-  showWelcome(VERSION);
-  markFirstRunComplete();
-  process.exit(0);
-}
 // Helper for hidden password input
 function askPassword(prompt = "Password: ") {
   return new Promise((resolve) => {
