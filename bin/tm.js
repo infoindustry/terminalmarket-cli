@@ -1719,11 +1719,22 @@ program
 
 // Handle no args - show beautiful welcome screen
 if (process.argv.length <= 2) {
-  const user = getUser();
-  const location = getLocation();
-  showStatusBar(user, location);
-  showWelcome(VERSION);
-  process.exit(0);
+  (async () => {
+    try {
+      const status = await apiGet("/auth/status");
+      if (status.isAuthenticated && status.user) {
+        const user = status.user;
+        const location = { city: user.city };
+        showStatusBar(user, location);
+      } else {
+        showStatusBar(null, getLocation());
+      }
+    } catch {
+      showStatusBar(getUser(), getLocation());
+    }
+    showWelcome(VERSION);
+    process.exit(0);
+  })();
+} else {
+  program.parse(process.argv);
 }
-
-program.parse(process.argv);
