@@ -15,7 +15,12 @@ import {
   printHeader, printDivider, printSuccess, printError, printWarning, printInfo, printField, printEmpty,
   printProductCard, printCart, printOrders, printStoreCard, printSellers, printReviews, printAIModels, printCredits
 } from "../src/format.js";
-import { showWelcome, showBox, showError, showSuccess, showStatusBar, showNextSteps, createSpinner, stopSpinner } from "../src/ui.js";
+import { 
+  theme, icons, showWelcome, showBox, showError, showSuccess, showWarning, showInfo,
+  showStatusBar, showNextSteps, createSpinner, stopSpinner, updateSpinner,
+  showSection, showDivider, showBanner, showInfoBox, showSuccessBox, showErrorBox,
+  showProgress, createLink
+} from "../src/ui.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -1714,7 +1719,9 @@ program
 
 // Handle no args - show beautiful welcome screen
 if (process.argv.length <= 2) {
-  showStatusBar();
+  const user = getUser();
+  const location = getLocation();
+  showStatusBar(user, location);
   showWelcome(VERSION);
   process.exit(0);
 }

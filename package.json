@@ -1,6 +1,6 @@
 {
   "name": "terminalmarket",
-  "version": "0.8.6",
+  "version": "0.9.0",
   "description": "TerminalMarket CLI — a curated marketplace for developers & founders (client for terminalmarket.app)",
   "bin": {
     "tm": "bin/tm.js"
@@ -57,10 +57,13 @@
     "cli-table3": "^0.6.5",
     "commander": "^12.1.0",
     "conf": "^12.0.0",
+    "figlet": "^1.10.0",
+    "gradient-string": "^3.0.0",
     "inquirer": "^9.2.15",
     "node-fetch": "^3.3.2",
     "open": "^9.1.0",
-    "ora": "^8.0.1"
+    "ora": "^8.0.1",
+    "terminal-link": "^5.0.0"
   },
   "engines": {
     "node": ">=18.0.0"
