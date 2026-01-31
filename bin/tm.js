@@ -1899,6 +1899,181 @@ program
     console.log();
   });
 
+// -----------------
+// Library Commands (Digital Products)
+// -----------------
+const library = program
+  .command("library")
+  .alias("lib")
+  .description("Your digital purchases & subscriptions");
+
+library
+  .command("list")
+  .description("List all your digital purchases")
+  .action(async () => {
+    try {
+      const data = await apiGet("/library");
+      
+      if (!data.purchases?.length && !data.subscriptions?.length) {
+        showInfoBox("Your library is empty", "Purchase digital products to see them here\n💡 Run: tm list --kind digital");
+        return;
+      }
+      
+      if (data.purchases?.length) {
+        showSection("Digital Purchases");
+        console.log(chalk.dim("  ID     Product                Type      Status    Purchased"));
+        console.log(chalk.dim("  ─".repeat(35)));
+        
+        for (const p of data.purchases) {
+          const date = new Date(p.createdAt).toLocaleDateString();
+          const status = p.status === 'active' ? chalk.green('active') : chalk.red(p.status);
+          const type = p.licenseKey ? 'key' : p.fileStoragePath ? 'file' : p.accessUrl ? 'link' : 'manual';
+          console.log(`  ${chalk.cyan(String(p.id).padEnd(6))} ${(p.productName || 'Unknown').padEnd(22).substring(0, 22)} ${type.padEnd(9)} ${status.padEnd(9)} ${date}`);
+        }
+      }
+      
+      if (data.subscriptions?.length) {
+        console.log();
+        showSection("SaaS Subscriptions");
+        console.log(chalk.dim("  ID     Product                Status      Renews"));
+        console.log(chalk.dim("  ─".repeat(35)));
+        
+        for (const s of data.subscriptions) {
+          const renewDate = s.currentPeriodEnd ? new Date(s.currentPeriodEnd).toLocaleDateString() : '-';
+          const statusColor = s.status === 'active' ? chalk.green : s.status === 'canceled' ? chalk.red : chalk.yellow;
+          console.log(`  ${chalk.cyan(String(s.id).padEnd(6))} ${(s.productName || 'Unknown').padEnd(22).substring(0, 22)} ${statusColor(s.status.padEnd(11))} ${renewDate}`);
+        }
+      }
+      
+      console.log();
+      showNextSteps(["tm keys       — show your license keys", "tm download 1 — download file for purchase #1"]);
+    } catch (error) {
+      showError(error.message || "Failed to fetch library");
+    }
+  });
+
+program
+  .command("lib")
+  .description("Shortcut: tm library list")
+  .action(async () => {
+    program.parse(["tm", "library", "list"]);
+  });
+
+program
+  .command("keys")
+  .description("Show your license keys")
+  .action(async () => {
+    try {
+      const data = await apiGet("/library/keys");
+      
+      if (!data?.length) {
+        showInfoBox("No license keys", "You haven't purchased any products with license keys yet");
+        return;
+      }
+      
+      showSection("Your License Keys");
+      console.log(chalk.dim("  Product                    Key"));
+      console.log(chalk.dim("  ─".repeat(35)));
+      
+      for (const p of data) {
+        console.log(`  ${(p.productName || 'Unknown').padEnd(28).substring(0, 28)} ${chalk.green(p.licenseKey)}`);
+      }
+      
+      console.log();
+      showInfo("Keys are yours forever. Copy and use them with the respective products.");
+    } catch (error) {
+      showError(error.message || "Failed to fetch keys");
+    }
+  });
+
+program
+  .command("download <purchaseId>")
+  .alias("dl")
+  .description("Download a digital file purchase")
+  .action(async (purchaseId) => {
+    const spinner = createSpinner("Preparing download...");
+    
+    try {
+      const fs = await import("fs");
+      const path = await import("path");
+      const https = await import("https");
+      const http = await import("http");
+      const { getApiBase } = await import("../src/config.js");
+      const { getCookies } = await import("../src/api.js");
+      
+      const baseUrl = getApiBase();
+      const url = `${baseUrl}/library/download/${purchaseId}`;
+      
+      const parsedUrl = new URL(url);
+      const protocol = parsedUrl.protocol === 'https:' ? https : http;
+      
+      updateSpinner(spinner, "Downloading...");
+      
+      const cookies = getCookies();
+      const options = {
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
+        path: parsedUrl.pathname,
+        method: 'GET',
+        headers: {
+          'Cookie': cookies || '',
+        }
+      };
+      
+      const req = protocol.request(options, (response) => {
+        if (response.statusCode === 401) {
+          stopSpinner(spinner);
+          showError("Login required. Run: tm login <email>");
+          return;
+        }
+        
+        if (response.statusCode === 404) {
+          stopSpinner(spinner);
+          showError("Purchase not found or no file available");
+          return;
+        }
+        
+        if (response.statusCode !== 200) {
+          stopSpinner(spinner);
+          showError(`Download failed (status ${response.statusCode})`);
+          return;
+        }
+        
+        const contentDisposition = response.headers['content-disposition'];
+        let filename = `download_${purchaseId}`;
+        if (contentDisposition) {
+          const match = contentDisposition.match(/filename="?([^";\n]+)"?/);
+          if (match) filename = match[1];
+        }
+        
+        const filePath = path.join(process.cwd(), filename);
+        const fileStream = fs.createWriteStream(filePath);
+        
+        response.pipe(fileStream);
+        
+        fileStream.on('finish', () => {
+          stopSpinner(spinner);
+          showSuccessBox("Download complete", `Saved to: ${filename}`);
+        });
+        
+        fileStream.on('error', (err) => {
+          stopSpinner(spinner);
+          showError(`Failed to save file: ${err.message}`);
+        });
+      });
+      
+      req.on('error', (err) => {
+        stopSpinner(spinner);
+        showError(`Download failed: ${err.message}`);
+      });
+      
+      req.end();
+    } catch (error) {
+      stopSpinner(spinner);
+      showError(error.message || "Download failed");
+    }
+  });
+
 program
   .command("help [command]")
   .description("Show help for a command")
