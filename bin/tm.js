@@ -7,7 +7,11 @@ import readline from "readline";
 
 import { apiGet, apiPost, apiDelete, apiPatch } from "../src/api.js";
 import { getApiBase, setApiBase, getUser, setUser, clearUser, clearSession } from "../src/config.js";
-import { printTable, pickProductFields, pickSellerFields, pickOfferFields, containsQuery, formatStars } from "../src/format.js";
+import { 
+  printTable, pickProductFields, pickSellerFields, pickOfferFields, containsQuery, formatStars,
+  printHeader, printDivider, printSuccess, printError, printWarning, printInfo, printField, printEmpty,
+  printProductCard, printCart, printOrders, printStoreCard, printSellers, printReviews, printAIModels, printCredits
+} from "../src/format.js";
 
 // Helper for hidden password input
 function askPassword(prompt = "Password: ") {
@@ -289,28 +293,16 @@ cart
     try {
       const cartData = await apiGet("/cart");
       
-      if (!cartData.items || cartData.items.length === 0) {
-        console.log(chalk.yellow("Your cart is empty."));
-        console.log(chalk.dim("Add items with: tm cart add <product-id>"));
-        return;
+      let total = 0;
+      if (cartData.items?.length) {
+        cartData.items.forEach((item) => {
+          total += (item.price || 0) * (item.quantity || 1);
+        });
       }
       
-      console.log(chalk.bold("Your Cart"));
-      console.log("");
-      
-      let total = 0;
-      cartData.items.forEach((item, i) => {
-        const subtotal = (item.price || 0) * (item.quantity || 1);
-        total += subtotal;
-        console.log(`${i + 1}. ${item.name || `Product #${item.productId}`}`);
-        console.log(`   ${chalk.dim("qty:")} ${item.quantity}  ${chalk.dim("price:")} $${item.price}  ${chalk.dim("subtotal:")} $${subtotal.toFixed(2)}`);
-      });
-      
-      console.log("");
-      console.log(chalk.bold(`Total: $${total.toFixed(2)}`));
-      console.log(chalk.dim("Checkout with: tm checkout"));
+      printCart(cartData.items || [], total);
     } catch (e) {
-      console.error(chalk.red(e?.message || String(e)));
+      printError(e?.message || String(e));
       process.exitCode = 1;
     }
   });
@@ -323,9 +315,9 @@ cart
     try {
       const quantity = parseInt(opts.quantity) || 1;
       await apiPost("/cart/add", { productId: parseInt(productId), quantity });
-      console.log(chalk.green(`Added to cart (qty: ${quantity})`));
+      printSuccess(`Added to cart (qty: ${quantity})`);
     } catch (e) {
-      console.error(chalk.red(e?.message || String(e)));
+      printError(e?.message || String(e));
       process.exitCode = 1;
     }
   });
@@ -336,9 +328,9 @@ cart
   .action(async (productId) => {
     try {
       await apiPost("/cart/remove", { productId: parseInt(productId) });
-      console.log(chalk.green("Removed from cart."));
+      printSuccess("Removed from cart");
     } catch (e) {
-      console.error(chalk.red(e?.message || String(e)));
+      printError(e?.message || String(e));
       process.exitCode = 1;
     }
   });
@@ -349,9 +341,9 @@ cart
   .action(async () => {
     try {
       await apiPost("/cart/clear", {});
-      console.log(chalk.green("Cart cleared."));
+      printSuccess("Cart cleared");
     } catch (e) {
-      console.error(chalk.red(e?.message || String(e)));
+      printError(e?.message || String(e));
       process.exitCode = 1;
     }
   });
@@ -421,28 +413,9 @@ program
     try {
       const orders = await apiGet("/orders");
       const limit = parseInt(opts.limit) || 10;
-      
-      if (!orders || orders.length === 0) {
-        console.log(chalk.yellow("No orders yet."));
-        return;
-      }
-      
-      console.log(chalk.bold("Order History"));
-      console.log("");
-      
-      orders.slice(0, limit).forEach((order) => {
-        const date = new Date(order.createdAt).toLocaleDateString();
-        const statusColor = order.status === "delivered" ? chalk.green :
-                           order.status === "shipped" ? chalk.cyan :
-                           order.status === "paid" ? chalk.blue :
-                           chalk.yellow;
-        
-        console.log(`${chalk.bold(order.orderNumber || `#${order.id}`)} - ${date}`);
-        console.log(`  ${chalk.dim("status:")} ${statusColor(order.status)}  ${chalk.dim("total:")} $${order.total || 0}`);
-        console.log("");
-      });
+      printOrders((orders || []).slice(0, limit));
     } catch (e) {
-      console.error(chalk.red(e?.message || String(e)));
+      printError(e?.message || String(e));
       process.exitCode = 1;
     }
   });
@@ -486,27 +459,9 @@ program
   .action(async (storeId) => {
     try {
       const data = await apiGet(`/stores/${storeId}/reviews`);
-      
-      if (data.reviewCount === 0) {
-        console.log(chalk.yellow(`No reviews yet for store #${storeId}.`));
-        console.log(chalk.dim(`Be the first: tm review ${storeId} <rating> [comment]`));
-        return;
-      }
-      
-      console.log(chalk.bold(`Store Reviews`));
-      console.log(`${formatStars(Math.round(data.averageRating))} ${data.averageRating.toFixed(1)}/5 (${data.reviewCount} reviews)`);
-      console.log("");
-      
-      data.reviews.forEach((review) => {
-        const date = new Date(review.createdAt).toLocaleDateString();
-        console.log(`${formatStars(review.rating)} by ${review.userName} (${date})`);
-        if (review.comment) {
-          console.log(`  "${review.comment}"`);
-        }
-        console.log("");
-      });
+      printReviews(data.reviews || [], data.averageRating);
     } catch (e) {
-      console.error(chalk.red(e?.message || String(e)));
+      printError(e?.message || String(e));
       process.exitCode = 1;
     }
   });
@@ -522,31 +477,21 @@ program
       const store = await apiGet(`/stores/${storeId}`);
       
       if (!store) {
-        console.error(chalk.red("Store not found."));
+        printError("Store not found");
         return;
       }
       
-      console.log(chalk.bold(store.name));
-      if (store.verified) console.log(chalk.green("✓ Verified"));
-      console.log("");
-      
-      if (store.description) console.log(store.description);
-      console.log("");
-      
-      console.log(`${chalk.dim("id:")} ${store.id}`);
-      if (store.slug) console.log(`${chalk.dim("slug:")} ${store.slug}`);
-      
+      // Get rating
       try {
         const rating = await apiGet(`/stores/${storeId}/rating`);
         if (rating.count > 0) {
-          console.log(`${chalk.dim("rating:")} ${formatStars(Math.round(rating.average))} ${rating.average.toFixed(1)}/5 (${rating.count} reviews)`);
+          store.rating = rating.average;
         }
       } catch {}
       
-      if (store.website) console.log(`${chalk.dim("website:")} ${store.website}`);
-      if (store.supportEmail) console.log(`${chalk.dim("support:")} ${store.supportEmail}`);
+      printStoreCard(store);
     } catch (e) {
-      console.error(chalk.red(e?.message || String(e)));
+      printError(e?.message || String(e));
       process.exitCode = 1;
     }
   });
@@ -567,40 +512,17 @@ ai
       const data = await apiGet("/ai/models");
       const { models, categories } = data;
       
-      if (!models || models.length === 0) {
-        console.log(chalk.yellow("No AI models available yet."));
-        return;
-      }
-      
-      console.log(chalk.bold("Available AI Models"));
-      console.log("");
-      
+      // Add category names to models
       const catMap = new Map((categories || []).map(c => [c.id, c]));
+      const modelsWithCat = (models || []).map(m => ({
+        ...m,
+        categoryName: catMap.get(m.categoryId)?.name || 'Other',
+        creditsPerRun: '$' + parseFloat(m.pricePerRun).toFixed(4)
+      }));
       
-      // Group by category
-      const grouped = {};
-      for (const model of models) {
-        const cat = catMap.get(model.categoryId);
-        const catName = cat ? cat.name : "Other";
-        if (!grouped[catName]) grouped[catName] = [];
-        grouped[catName].push(model);
-      }
-      
-      for (const [catName, catModels] of Object.entries(grouped)) {
-        console.log(chalk.cyan.bold(`${catName}:`));
-        for (const model of catModels) {
-          const price = parseFloat(model.pricePerRun).toFixed(4);
-          console.log(`  ${chalk.white(model.slug.padEnd(25))} $${price}  ${chalk.dim(model.outputType)}`);
-          if (model.description) {
-            console.log(`    ${chalk.dim(model.description)}`);
-          }
-        }
-        console.log("");
-      }
-      
-      console.log(chalk.dim("Run: tm ai run <model> <input>"));
+      printAIModels(modelsWithCat, categories);
     } catch (e) {
-      console.error(chalk.red(e?.message || String(e)));
+      printError(e?.message || String(e));
       process.exitCode = 1;
     }
   });
@@ -649,18 +571,20 @@ ai
     try {
       const credits = await apiGet("/credits");
       
-      console.log(chalk.bold("AI Credits"));
-      console.log("");
-      console.log(`${chalk.dim("balance:")}     $${parseFloat(credits.balance).toFixed(4)}`);
-      console.log(`${chalk.dim("purchased:")}   $${parseFloat(credits.totalPurchased).toFixed(2)}`);
-      console.log(`${chalk.dim("spent:")}       $${parseFloat(credits.totalSpent).toFixed(4)}`);
-      console.log("");
-      console.log(chalk.dim("Top up: tm ai topup <amount>"));
+      console.log();
+      console.log(chalk.cyan.bold('  💳 AI Credits'));
+      console.log();
+      console.log(`  ${chalk.white('Balance:')}     ${chalk.green.bold('$' + parseFloat(credits.balance).toFixed(4))}`);
+      console.log(`  ${chalk.dim('Purchased:')}   $${parseFloat(credits.totalPurchased).toFixed(2)}`);
+      console.log(`  ${chalk.dim('Spent:')}       $${parseFloat(credits.totalSpent).toFixed(4)}`);
+      console.log();
+      console.log(chalk.dim('  💡 tm ai topup <amount> — add more credits'));
+      console.log();
     } catch (e) {
       if (e?.message?.includes("401") || e?.message?.includes("Login")) {
-        console.log(chalk.yellow("Please login first: tm login <email> <password>"));
+        printWarning("Please login first: tm login <email>");
       } else {
-        console.error(chalk.red(e?.message || String(e)));
+        printError(e?.message || String(e));
         process.exitCode = 1;
       }
     }
@@ -1216,48 +1140,8 @@ program
         return;
       }
       
-      console.log(chalk.bold(p.name || `Product ${productIdOrSlug}`));
-      console.log("");
-      
-      if (p.shortDescription) {
-        console.log(chalk.italic(p.shortDescription));
-        console.log("");
-      }
-      
-      if (p.description) {
-        console.log(p.description);
-        console.log("");
-      }
-      
-      console.log(`${chalk.dim("id:")} ${p.productId || p.id}`);
-      if (p.slug) console.log(`${chalk.dim("slug:")} ${p.slug}`);
-      if (p.category) console.log(`${chalk.dim("category:")} ${p.category}`);
-      if (p.price) console.log(`${chalk.dim("price:")} $${p.price}`);
-      
-      const serviceType = p.serviceType || "global";
-      const typeLabel = serviceType === "global" ? "🌍 Global" : 
-                       serviceType === "national" ? "🏳️ National" : "📍 Local";
-      console.log(`${chalk.dim("serviceType:")} ${typeLabel}`);
-      
-      if (serviceType === "local" && p.serviceCity) {
-        console.log(`${chalk.dim("city:")} ${p.serviceCity}`);
-      }
-      if ((serviceType === "national" || serviceType === "local") && p.serviceCountry) {
-        console.log(`${chalk.dim("country:")} ${p.serviceCountry}`);
-      }
-      
-      // Show image URL if available
-      const imageUrl = p.imageUrl || p.image;
-      if (imageUrl) {
-        console.log("");
-        console.log(`${chalk.dim("image:")} ${imageUrl}`);
-        console.log(chalk.dim(`Use: tm view ${p.slug || p.id} --image`));
-      }
-      
-      if (p.buyUrl) console.log(`${chalk.dim("buyUrl:")} ${p.buyUrl}`);
-      if (p.subscriptionAvailable) console.log(`${chalk.dim("subscription:")} ${chalk.green("available")}`);
-      if (p.tags && p.tags.length > 0) console.log(`${chalk.dim("tags:")} ${p.tags.join(", ")}`);
-      if (p.storeId) console.log(`${chalk.dim("storeId:")} ${p.storeId}`);
+      // Print beautiful product card
+      printProductCard(p);
       
       try {
         const offers = await apiGet(`/products/${encodeURIComponent(p.productId || p.id)}/offers`);
@@ -1433,15 +1317,9 @@ program
         );
       }
       
-      const rows = (sellers || []).slice(0, limit).map(pickSellerFields);
-      printTable(rows, [
-        { key: "slug", title: "slug" },
-        { key: "name", title: "name" },
-        { key: "serviceType", title: "type" },
-        { key: "verified", title: "verified" },
-      ]);
+      printSellers((sellers || []).slice(0, limit));
     } catch (e) {
-      console.error(chalk.red(e?.message || String(e)));
+      printError(e?.message || String(e));
       process.exitCode = 1;
     }
   });
@@ -1454,47 +1332,14 @@ program
       const seller = await apiGet(`/sellers/${encodeURIComponent(slug)}`);
       
       if (!seller) {
-        console.error(chalk.red("Seller not found"));
+        printError("Seller not found");
         process.exitCode = 1;
         return;
       }
       
-      console.log(chalk.bold(seller.name));
-      if (seller.verified) {
-        console.log(chalk.green("✓ Verified Seller"));
-      }
-      console.log("");
-      
-      if (seller.description) console.log(seller.description);
-      console.log("");
-      
-      console.log(`${chalk.dim("slug:")} ${seller.slug}`);
-      
-      const serviceType = seller.serviceType || "global";
-      const typeLabel = serviceType === "global" ? "🌍 Global (SaaS/Digital)" : 
-                       serviceType === "national" ? "🏳️ National" : "📍 Local";
-      console.log(`${chalk.dim("serviceType:")} ${typeLabel}`);
-      
-      if (serviceType === "local" && seller.baseCity) {
-        console.log(`${chalk.dim("city:")} ${seller.baseCity}`);
-      }
-      if ((serviceType === "national" || serviceType === "local") && seller.baseCountry) {
-        console.log(`${chalk.dim("country:")} ${seller.baseCountry}`);
-      }
-      
-      if (seller.website) console.log(`${chalk.dim("website:")} ${seller.website}`);
-      if (seller.supportEmail) console.log(`${chalk.dim("support:")} ${seller.supportEmail}`);
-      if (seller.badges && seller.badges.length > 0) {
-        console.log(`${chalk.dim("badges:")} ${seller.badges.join(", ")}`);
-      }
-      if (seller.categories && seller.categories.length > 0) {
-        console.log(`${chalk.dim("categories:")} ${seller.categories.join(", ")}`);
-      }
-      if (seller.shippingPolicy) console.log(`${chalk.dim("shippingPolicy:")} ${seller.shippingPolicy}`);
-      if (seller.returnPolicy) console.log(`${chalk.dim("returnPolicy:")} ${seller.returnPolicy}`);
-      
+      printStoreCard(seller);
     } catch (e) {
-      console.error(chalk.red(e?.message || String(e)));
+      printError(e?.message || String(e));
       process.exitCode = 1;
     }
   });
