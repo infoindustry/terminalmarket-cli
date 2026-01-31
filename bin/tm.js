@@ -4,6 +4,9 @@ import { Command } from "commander";
 import chalk from "chalk";
 import open from "open";
 import readline from "readline";
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 
 import { apiGet, apiPost, apiDelete, apiPatch } from "../src/api.js";
 import { getApiBase, setApiBase, getUser, setUser, clearUser, clearSession } from "../src/config.js";
@@ -13,6 +16,10 @@ import {
   printProductCard, printCart, printOrders, printStoreCard, printSellers, printReviews, printAIModels, printCredits
 } from "../src/format.js";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const pkg = JSON.parse(readFileSync(join(__dirname, "../package.json"), "utf-8"));
+const VERSION = pkg.version;
 // Helper for hidden password input
 function askPassword(prompt = "Password: ") {
   return new Promise((resolve) => {
@@ -63,7 +70,7 @@ const program = new Command();
 program
   .name("tm")
   .description("TerminalMarket CLI — marketplace for developers")
-  .version("0.7.0");
+  .version(VERSION);
 
 // -----------------
 // config
@@ -1533,7 +1540,7 @@ function showHelp(commandName = null) {
   
   console.log();
   console.log(chalk.green.bold('  ╔' + line + '╗'));
-  console.log(chalk.green.bold('  ║') + chalk.white.bold(pad('  TerminalMarket CLI', W - 8)) + chalk.dim(' v0.7.2 ') + chalk.green.bold('║'));
+  console.log(chalk.green.bold('  ║') + chalk.white.bold(pad('  TerminalMarket CLI', W - 8)) + chalk.dim(` v${VERSION} `) + chalk.green.bold('║'));
   console.log(chalk.green.bold('  ║') + chalk.dim(pad('  Marketplace for developers', W)) + chalk.green.bold('║'));
   console.log(chalk.green.bold('  ╚' + line + '╝'));
   console.log();
