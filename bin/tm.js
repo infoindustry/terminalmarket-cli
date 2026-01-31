@@ -1438,8 +1438,14 @@ program
     console.log();
     console.log(chalk.dim('  ─────────────────────────────────────────────'));
     console.log();
+    console.log(chalk.white('  Install:'));
+    console.log();
+    console.log(`    ${chalk.dim('npm:')}    ${chalk.green('npm i -g terminalmarket')}`);
+    console.log(`    ${chalk.dim('curl:')}   ${chalk.cyan('curl -fsSL https://terminalmarket.app/install.sh | sh')}`);
+    console.log();
+    console.log(chalk.dim('  ─────────────────────────────────────────────'));
+    console.log();
     console.log(`  ${chalk.dim('Website:')}  ${chalk.cyan('https://terminalmarket.app')}`);
-    console.log(`  ${chalk.dim('Install:')}  ${chalk.green('npm i -g terminalmarket')}`);
     console.log(`  ${chalk.dim('Version:')}  ${chalk.white('0.7.2')}`);
     console.log();
   });
