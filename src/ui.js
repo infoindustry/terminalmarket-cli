@@ -32,15 +32,15 @@ export function stopSpinner(success = true, text = null) {
 export function showWelcome(version) {
   const content = `${chalk.green.bold("TerminalMarket CLI")} ${chalk.dim(`v${version}`)}
 ${chalk.dim("A curated marketplace for developers & founders")}
+${chalk.yellow("Early access")} ${chalk.dim("•")} ${chalk.white("Real products")} ${chalk.dim("•")} ${chalk.green("Real checkout")}
 
 ${chalk.white("Try one of these:")}
   ${chalk.cyan("tm products")}      ${chalk.dim("— browse products")}
   ${chalk.cyan("tm search lunch")}  ${chalk.dim("— search for lunch deals")}
-  ${chalk.cyan("tm categories")}    ${chalk.dim("— explore categories")}
-  ${chalk.cyan("tm ai list")}       ${chalk.dim("— browse AI models")}
+  ${chalk.cyan("tm buy <id>")}      ${chalk.dim("— purchase a product")}
   ${chalk.cyan("tm start")}         ${chalk.dim("— interactive tour")}
 
-${chalk.dim("Tip: this is a real marketplace — products open real checkout pages.")}`;
+${chalk.dim("This is a pilot marketplace with early partners. Every purchase is real.")}`;
 
   console.log();
   console.log(boxen(content, {

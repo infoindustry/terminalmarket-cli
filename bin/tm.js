@@ -974,10 +974,25 @@ program
         url = `${url}?${queryString}`;
       }
       
-      const products = await apiGet(url);
+      let products = await apiGet(url);
       stopSpinner(true, `Found ${products.length} products`);
       
-      const rows = (products || []).slice(0, limit).map(pickProductFields);
+      // Sort: featured first
+      products = (products || []).sort((a, b) => {
+        if (a.featured && !b.featured) return -1;
+        if (!a.featured && b.featured) return 1;
+        return 0;
+      });
+      
+      const rows = products.slice(0, limit).map(p => {
+        const row = pickProductFields(p);
+        if (p.featured) {
+          row.name = chalk.yellow("⭐") + " " + row.name;
+          row.badge = chalk.yellow("Early partner");
+        }
+        return row;
+      });
+      
       printTable(rows, [
         { key: "id", title: "id" },
         { key: "slug", title: "slug" },
@@ -989,7 +1004,7 @@ program
       
       showNextSteps([
         { cmd: "tm view <id>", desc: "view product details" },
-        { cmd: "tm add <id>", desc: "add to cart" }
+        { cmd: "tm buy <id>", desc: "buy product" }
       ]);
     } catch (e) {
       stopSpinner(false, "Failed to load products");
@@ -1268,15 +1283,18 @@ program
       }
 
       if (!buyUrl) {
-        console.error(chalk.red("This product has no buyUrl."));
+        console.log(chalk.yellow("This product has no checkout link yet."));
+        console.log(chalk.dim("This is a pilot marketplace — contact the seller directly."));
         process.exitCode = 1;
         return;
       }
 
-      console.log(chalk.green("Opening:"), buyUrl);
-      if (intentId) {
-        console.log(chalk.dim(`Intent ID: ${intentId}`));
-      }
+      console.log();
+      console.log(chalk.green.bold("  Opening checkout..."));
+      console.log(chalk.dim(`  ${buyUrl}`));
+      console.log();
+      console.log(chalk.yellow("  ℹ Early access — real checkout, real purchase"));
+      console.log();
       
       if (opts.open !== false) {
         await open(buyUrl);
@@ -1676,11 +1694,13 @@ program
         ]);
       }
       
-      showNextSteps([
-        { cmd: "tm view <id>", desc: "view product details" },
-        { cmd: "tm add <id>", desc: "add to cart" },
-        { cmd: "tm search <query>", desc: "search products" }
-      ]);
+      console.log();
+      console.log(chalk.green.bold("  You're all set! 🎉"));
+      console.log();
+      console.log(chalk.dim("  Try:"));
+      console.log(chalk.cyan("    tm products"));
+      console.log(chalk.cyan("    tm buy <id>"));
+      console.log();
       
     } catch (e) {
       stopSpinner(false, "Failed to load");
