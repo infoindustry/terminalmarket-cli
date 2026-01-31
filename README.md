@@ -4,9 +4,19 @@ The official command-line interface for [TerminalMarket](https://terminalmarket.
 
 ## Installation
 
+### npm (requires Node.js)
+
 ```bash
 npm install -g terminalmarket
 ```
+
+### Standalone binary (no Node.js needed)
+
+```bash
+curl -fsSL https://terminalmarket.app/install.sh | sh
+```
+
+This installs `tm` into `~/.local/bin`.
 
 ## Usage
 
@@ -19,22 +29,25 @@ tm <command> [options]
 ### Authentication
 
 ```bash
-tm register <email> <password>     # Create a new account
-tm login <email> <password>        # Login to your account
+tm register <email> [password]     # Create a new account
+tm login <email> [password]        # Login to your account
 tm logout                          # Logout
 tm whoami                          # Show current user info
 tm me                              # Alias for whoami
+tm auth github                     # Login with GitHub (opens browser)
+tm github                          # Shortcut for GitHub auth
 ```
 
 ### Profile
 
 ```bash
 tm profile                         # View your profile
-tm profile name "John Doe"         # Update your name
-tm profile phone "+1234567890"     # Update phone
-tm profile address "123 Main St"   # Update address
-tm profile city "Berlin"           # Update city
-tm profile country "DE"            # Update country
+tm profile view                    # View your profile
+tm profile set name "John Doe"     # Update your name
+tm profile set phone "+1234567890" # Update phone
+tm profile set address "123 Main"  # Update address
+tm profile set city "Berlin"       # Update city
+tm profile set country "DE"        # Update country
 ```
 
 ### Shopping
@@ -87,20 +100,19 @@ tm credits                         # Check credits (shortcut)
 tm topup <amount>                  # Add credits (shortcut)
 ```
 
-Example:
+### Aliases & Rewards
+
 ```bash
-tm ai list                         # See available models
-tm ai topup 10                     # Add $10 credits
-tm ai run text-rewrite "Fix this text"  # Run AI model
-tm ai credits                      # Check remaining balance
+tm alias list                      # List your aliases
+tm alias add <name> <command>      # Create alias
+tm alias remove <name>             # Remove alias
+tm aliases                         # Shortcut for alias list
+
+tm reward list                     # List reward rules
+tm reward add <product> <pushes>   # Auto-order after N pushes
+tm reward remove <id>              # Remove reward rule
+tm rewards                         # Shortcut for reward list
 ```
-
-### Service Types
-
-Products have different service types:
-- Global — SaaS, digital products, worldwide delivery
-- National — Country-wide delivery/services
-- Local — City-specific services (food delivery, coworking, etc.)
 
 ### Categories & Offers
 
@@ -108,11 +120,9 @@ Products have different service types:
 tm categories                      # List all categories
 tm category <slug>                 # List products in category
 tm offers                          # List all offers
-tm offers --product <id>           # Filter by product
-tm offers --seller <id>            # Filter by seller
 ```
 
-Available categories include:
+Available categories:
 - `coffee` — Specialty coffee for developers
 - `lunch` — Meal subscriptions & delivery
 - `snacks` — Healthy snacks & energy packs
@@ -134,6 +144,7 @@ tm config set api <url>            # Set API endpoint
 ```bash
 tm about                           # About TerminalMarket
 tm help                            # Show help
+tm help <command>                  # Help for specific command
 tm --version                       # Show version
 ```
 
@@ -152,49 +163,11 @@ tm review 1 5 "Great coffee, fast delivery!"
 
 # View your order history
 tm orders
+
+# Use AI services
+tm ai topup 10
+tm ai run text-rewrite "Fix this text"
 ```
-
-## Seller Tiers
-
-| Tier | Price | Products | Commission | Features |
-|------|-------|----------|------------|----------|
-| Free | $0/mo | 5 | 5% | Basic analytics |
-| Basic | $29/mo | 50 | 4% | Priority support |
-| Premium | $99/mo | 1000 | 2.5% | Stripe Connect, Terminal Checkout |
-
-## API Endpoints Used
-
-### Public
-- `GET /api/products` — List products
-- `GET /api/products/:id` — Get product details
-- `GET /api/products/slug/:slug` — Get product by slug
-- `GET /api/products/category/:category` — Products by category
-- `GET /api/products/search` — Search products
-- `GET /api/categories` — List categories
-- `GET /api/sellers` — List sellers
-- `GET /api/sellers/:slug` — Get seller details
-- `GET /api/offers` — List offers
-- `GET /api/stores/:id/reviews` — Get store reviews
-- `GET /api/stores/:id/rating` — Get store rating
-
-### Authenticated
-- `POST /api/auth/register` — Create account
-- `POST /api/auth/login` — Login
-- `POST /api/auth/logout` — Logout
-- `GET /api/auth/status` — Check auth status
-- `PATCH /api/profile` — Update profile
-- `GET /api/cart` — Get cart
-- `POST /api/cart/add` — Add to cart
-- `POST /api/cart/remove` — Remove from cart
-- `POST /api/cart/clear` — Clear cart
-- `GET /api/orders` — Get orders
-- `POST /api/stores/:id/reviews` — Leave review
-- `GET /api/credits` — Get AI credits balance
-- `POST /api/credits/topup` — Create Stripe checkout for credits
-- `POST /api/ai/run/:model` — Run AI model
-- `GET /api/ai/history` — Get AI usage history
-- `POST /api/clicks` — Track clicks
-- `POST /api/intents` — Create purchase intent
 
 ## Configuration
 
@@ -203,6 +176,20 @@ The CLI stores configuration in `~/.config/terminalmarket/config.json`:
 - `apiBase`: API endpoint (default: `https://terminalmarket.app/api`)
 - `sessionCookie`: Session cookie for authentication
 - `user`: Cached user info
+
+## Building Binaries
+
+See [INSTALL_BINARIES.md](./INSTALL_BINARIES.md) for instructions on building standalone binaries.
+
+```bash
+npm ci
+npm run build:bin
+```
+
+This produces binaries in `dist/`:
+- `tm-linux-x64`
+- `tm-macos-x64`
+- `tm-macos-arm64`
 
 ## License
 
