@@ -38,28 +38,6 @@ export const theme = {
   }
 };
 
-const LOGO_MINI = `
-  ╔╦╗┌─┐┬─┐┌┬┐┬┌┐┌┌─┐┬  
-   ║ ├┤ ├┬┘│││││││├─┤│  
-   ╩ └─┘┴└─┴ ┴┴┘└┘┴ ┴┴─┘
-  ╔╦╗┌─┐┬─┐┬┌─┌─┐┌┬┐
-  ║║║├─┤├┬┘├┴┐├┤  │ 
-  ╩ ╩┴ ┴┴└─┴ ┴└─┘ ┴ `;
-
-const LOGO_LARGE = `
-████████╗███████╗██████╗ ███╗   ███╗██╗███╗   ██╗ █████╗ ██╗     
-╚══██╔══╝██╔════╝██╔══██╗████╗ ████║██║████╗  ██║██╔══██╗██║     
-   ██║   █████╗  ██████╔╝██╔████╔██║██║██╔██╗ ██║███████║██║     
-   ██║   ██╔══╝  ██╔══██╗██║╚██╔╝██║██║██║╚██╗██║██╔══██║██║     
-   ██║   ███████╗██║  ██║██║ ╚═╝ ██║██║██║ ╚████║██║  ██║███████╗
-   ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝
-███╗   ███╗ █████╗ ██████╗ ██╗  ██╗███████╗████████╗
-████╗ ████║██╔══██╗██╔══██╗██║ ██╔╝██╔════╝╚══██╔══╝
-██╔████╔██║███████║██████╔╝█████╔╝ █████╗     ██║   
-██║╚██╔╝██║██╔══██║██╔══██╗██╔═██╗ ██╔══╝     ██║   
-██║ ╚═╝ ██║██║  ██║██║  ██║██║  ██╗███████╗   ██║   
-╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝   ╚═╝   `;
-
 export const icons = {
   success: "✔",
   error: "✖",
@@ -201,50 +179,27 @@ export function showWarningBox(message) {
 }
 
 export function showWelcome(version) {
-  const termWidth = process.stdout.columns || 80;
-  const useSmallLogo = termWidth < 100;
+  let content = "";
+  content += theme.primary.bold("TerminalMarket") + "\n";
+  content += theme.muted("The Marketplace for Developers") + "\n\n";
+  content += `${theme.dim("v")}${theme.secondary(version)} ${theme.dim("│")} ${theme.warning("Early access")} ${theme.dim("│")} ${theme.primary("Real checkout")}\n\n`;
+  content += theme.dim("─".repeat(40)) + "\n\n";
+  content += theme.text.bold("Quick Start:") + "\n\n";
+  content += `${theme.muted("🔍")} ${theme.secondary("tm products".padEnd(20))} ${theme.dim("Browse products")}\n`;
+  content += `${theme.muted("🔍")} ${theme.secondary("tm search <query>".padEnd(20))} ${theme.dim("Search marketplace")}\n`;
+  content += `${theme.muted("💳")} ${theme.secondary("tm buy <id>".padEnd(20))} ${theme.dim("Purchase a product")}\n`;
+  content += `${theme.muted("🤖")} ${theme.secondary("tm ai list".padEnd(20))} ${theme.dim("AI services")}\n`;
+  content += `${theme.muted("ℹ")}  ${theme.secondary("tm help".padEnd(20))} ${theme.dim("All commands")}\n\n`;
+  content += theme.dim("─".repeat(40)) + "\n\n";
+  content += `${theme.dim("💡")} ${theme.muted("Run")} ${theme.secondary("tm login")} ${theme.muted("to unlock all features")}`;
   
   console.log();
-  
-  if (useSmallLogo) {
-    console.log(theme.gradients.brand(LOGO_MINI));
-  } else {
-    console.log(theme.gradients.brand(LOGO_LARGE));
-  }
-  
-  console.log();
-  
-  const tagline = "  The Marketplace for Developers";
-  console.log(theme.muted(tagline));
-  console.log();
-  
-  const versionBadge = `  ${theme.dim("v")}${theme.secondary(version)} ${theme.dim("│")} ${theme.warning("Early access")} ${theme.dim("│")} ${theme.primary("Real checkout")}`;
-  console.log(versionBadge);
-  
-  console.log();
-  console.log(theme.dim("  " + "─".repeat(Math.min(50, termWidth - 4))));
-  console.log();
-  
-  const commands = [
-    { cmd: "tm products", desc: "Browse products", icon: icons.search },
-    { cmd: "tm search <query>", desc: "Search marketplace", icon: icons.search },
-    { cmd: "tm buy <id>", desc: "Purchase a product", icon: icons.buy },
-    { cmd: "tm ai list", desc: "AI services", icon: icons.ai },
-    { cmd: "tm help", desc: "All commands", icon: icons.info },
-  ];
-  
-  console.log(theme.text.bold("  Quick Start:"));
-  console.log();
-  
-  commands.forEach(({ cmd, desc, icon }) => {
-    console.log(`  ${theme.muted(icon)} ${theme.secondary(cmd.padEnd(22))} ${theme.dim(desc)}`);
-  });
-  
-  console.log();
-  console.log(theme.dim("  " + "─".repeat(Math.min(50, termWidth - 4))));
-  console.log();
-  
-  console.log(`  ${theme.dim("💡")} ${theme.muted("Run")} ${theme.secondary("tm login")} ${theme.muted("to unlock all features")}`);
+  console.log(boxen(content, {
+    borderStyle: "round",
+    borderColor: "#00FF9F",
+    padding: 1,
+    margin: { left: 2 }
+  }));
   console.log();
 }
 
