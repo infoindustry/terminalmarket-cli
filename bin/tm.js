@@ -2074,6 +2074,127 @@ program
     }
   });
 
+// -----------------
+// Jobs Commands (On-Demand Services)
+// -----------------
+const jobs = program
+  .command("jobs")
+  .description("Your on-demand service jobs");
+
+jobs
+  .command("list")
+  .description("List all your jobs")
+  .action(async () => {
+    try {
+      const spinner = createSpinner("Fetching jobs...");
+      const data = await apiGet("/jobs");
+      stopSpinner(spinner);
+      
+      if (!data?.length) {
+        showInfoBox("No jobs yet", "Purchase on-demand services to see your jobs here\n💡 On-demand services execute tasks for you (SEO audits, code conversions, etc.)");
+        return;
+      }
+      
+      showSection("Your Jobs");
+      console.log(chalk.dim("  Job ID                       Service               Status       Created"));
+      console.log(chalk.dim("  ─".repeat(40)));
+      
+      for (const job of data) {
+        const statusIcon = {
+          'pending_payment': chalk.yellow("⏳"),
+          'queued': chalk.blue("📋"),
+          'dispatching': chalk.blue("🚀"),
+          'dispatched': chalk.cyan("⏳"),
+          'completed': chalk.green("✓"),
+          'failed': chalk.red("✗"),
+        }[job.status] || "•";
+        
+        const statusColor = {
+          'pending_payment': chalk.yellow,
+          'queued': chalk.blue,
+          'dispatching': chalk.blue,
+          'dispatched': chalk.cyan,
+          'completed': chalk.green,
+          'failed': chalk.red,
+        }[job.status] || chalk.gray;
+        
+        const date = new Date(job.createdAt).toLocaleDateString();
+        console.log(`  ${statusIcon} ${chalk.white(job.jobId.padEnd(26))} ${chalk.cyan((job.productName || 'Unknown').substring(0, 20).padEnd(20))} ${statusColor(job.status.padEnd(12))} ${chalk.dim(date)}`);
+      }
+      
+      console.log();
+      showNextSteps(["tm job <job_id> — view job details and results"]);
+    } catch (error) {
+      showError(error.message || "Failed to fetch jobs");
+    }
+  });
+
+program
+  .command("job <jobId>")
+  .description("View job details and results")
+  .action(async (jobId) => {
+    try {
+      const spinner = createSpinner("Fetching job details...");
+      const job = await apiGet(`/jobs/${jobId}`);
+      stopSpinner(spinner);
+      
+      showSection(`Job: ${job.jobId}`);
+      console.log();
+      
+      const statusIcon = {
+        'pending_payment': '⏳ Pending Payment',
+        'queued': '📋 Queued',
+        'dispatching': '🚀 Dispatching',
+        'dispatched': '⏳ Waiting for Result',
+        'completed': '✅ Completed',
+        'failed': '❌ Failed',
+      }[job.status] || job.status;
+      
+      console.log(`  ${chalk.dim("Service:")} ${chalk.white(job.productName || 'Unknown')}`);
+      console.log(`  ${chalk.dim("Status:")}  ${job.status === 'completed' ? chalk.green(statusIcon) : job.status === 'failed' ? chalk.red(statusIcon) : chalk.yellow(statusIcon)}`);
+      console.log(`  ${chalk.dim("Created:")} ${new Date(job.createdAt).toLocaleString()}`);
+      
+      if (job.completedAt) {
+        console.log(`  ${chalk.dim("Completed:")} ${new Date(job.completedAt).toLocaleString()}`);
+      }
+      
+      if (job.inputData && Object.keys(job.inputData).length > 0) {
+        console.log();
+        console.log(chalk.dim("  ─ Input Data ─"));
+        for (const [key, value] of Object.entries(job.inputData)) {
+          console.log(`  ${chalk.cyan(key)}: ${chalk.white(String(value))}`);
+        }
+      }
+      
+      if (job.status === 'completed' && job.resultData) {
+        console.log();
+        console.log(chalk.green("  ─ Result ─"));
+        for (const [key, value] of Object.entries(job.resultData)) {
+          if (typeof value === 'string' && value.startsWith('http')) {
+            console.log(`  ${chalk.cyan(key)}: ${chalk.underline.blue(value)}`);
+          } else {
+            console.log(`  ${chalk.cyan(key)}: ${chalk.white(String(value))}`);
+          }
+        }
+      }
+      
+      if (job.status === 'failed' && job.resultData?.error) {
+        console.log();
+        console.log(chalk.red(`  Error: ${job.resultData.error}`));
+      }
+      
+      if (job.lastDispatchError) {
+        console.log();
+        console.log(chalk.dim(`  Dispatch attempts: ${job.dispatchAttempts}`));
+        console.log(chalk.dim(`  Last error: ${job.lastDispatchError}`));
+      }
+      
+      console.log();
+    } catch (error) {
+      showError(error.message || "Failed to fetch job");
+    }
+  });
+
 program
   .command("help [command]")
   .description("Show help for a command")
