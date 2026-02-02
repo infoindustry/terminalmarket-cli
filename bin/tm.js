@@ -1002,6 +1002,7 @@ program
         { key: "price", title: "price" },
         { key: "category", title: "category" },
         { key: "serviceType", title: "type" },
+        { key: "serviceCity", title: "city" },
       ]);
       
       showNextSteps([
@@ -1044,6 +1045,7 @@ program
         { key: "price", title: "price" },
         { key: "category", title: "category" },
         { key: "serviceType", title: "type" },
+        { key: "serviceCity", title: "city" },
       ]);
     } catch (e) {
       console.error(chalk.red(e?.message || String(e)));
@@ -1085,6 +1087,7 @@ program
         { key: "price", title: "price" },
         { key: "category", title: "category" },
         { key: "serviceType", title: "type" },
+        { key: "serviceCity", title: "city" },
       ]);
       
       if (products.length >= limit) {
@@ -1110,6 +1113,7 @@ program
           { key: "price", title: "price" },
           { key: "category", title: "category" },
           { key: "serviceType", title: "type" },
+          { key: "serviceCity", title: "city" },
         ]);
         
         if (matched.length > limit) {
