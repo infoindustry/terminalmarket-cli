@@ -300,6 +300,9 @@ export function printOrders(orders) {
     console.log(chalk.white.bold(`  ${order.orderNumber || '#' + order.id}`));
     console.log(`     ${chalk.dim('Date:')} ${date}  ${chalk.dim('Total:')} ${chalk.green('$' + (order.total || 0))}`);
     console.log(`     ${statusDisplay}`);
+    if (order.deliveryMethod === 'digital') {
+      console.log(`     ${chalk.dim('Download or key in library')}`);
+    }
     console.log();
   });
 }
