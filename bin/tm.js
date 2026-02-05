@@ -256,20 +256,39 @@ async function showProfile() {
     return;
   }
   const user = result.user;
+  
+  // Availability status
+  const availStatus = user.availableForHire 
+    ? chalk.green('🟢 Available for hire')
+    : chalk.dim('⚫ Not looking');
+  
   console.log();
   console.log(chalk.green.bold('┌─────────────────────────────────────┐'));
-  console.log(chalk.green.bold('│') + chalk.white.bold('  Your Profile') + ' '.repeat(22) + chalk.green.bold('│'));
+  console.log(chalk.green.bold('│') + chalk.white.bold('  Developer Profile') + ' '.repeat(17) + chalk.green.bold('│'));
   console.log(chalk.green.bold('└─────────────────────────────────────┘'));
+  console.log(`  ${availStatus}`);
   console.log();
+  
+  // Basic info
+  console.log(chalk.cyan.bold('  Basic Info'));
   console.log(`  ${chalk.dim('Username:')}  ${chalk.white(user.username || user.email?.split('@')[0] || '-')}`);
   console.log(`  ${chalk.dim('Email:')}     ${chalk.cyan(user.email || '-')}`);
   console.log(`  ${chalk.dim('Name:')}      ${user.name || chalk.dim('(not set)')}`);
   console.log(`  ${chalk.dim('Phone:')}     ${user.phone || chalk.dim('(not set)')}`);
-  console.log(`  ${chalk.dim('Address:')}   ${user.address || chalk.dim('(not set)')}`);
-  console.log(`  ${chalk.dim('City:')}      ${user.city || chalk.dim('(not set)')}`);
-  console.log(`  ${chalk.dim('Country:')}   ${user.country || chalk.dim('(not set)')}`);
+  console.log(`  ${chalk.dim('Location:')}  ${[user.city, user.country].filter(Boolean).join(', ') || chalk.dim('(not set)')}`);
+  console.log();
+  
+  // Developer info
+  console.log(chalk.cyan.bold('  Developer Profile'));
+  console.log(`  ${chalk.dim('GitHub:')}    ${user.githubUsername ? '@' + user.githubUsername : chalk.dim('(not set)')}`);
+  console.log(`  ${chalk.dim('LinkedIn:')}  ${user.linkedinUrl || chalk.dim('(not set)')}`);
+  console.log(`  ${chalk.dim('Skills:')}    ${user.skills?.length ? user.skills.join(', ') : chalk.dim('(not set)')}`);
+  if (user.bio) {
+    console.log(`  ${chalk.dim('Bio:')}       ${user.bio}`);
+  }
   console.log();
   console.log(chalk.dim('  Use: tm profile set <field> <value>'));
+  console.log(chalk.dim('  Fields: name, phone, city, country, github, linkedin, skills, bio, available'));
   console.log();
 }
 
@@ -279,17 +298,43 @@ async function setProfileField(field, value) {
     console.log(chalk.yellow("Not logged in. Use 'tm login' first."));
     return;
   }
-  const validFields = ["name", "phone", "address", "city", "country"];
-  if (!validFields.includes(field)) {
-    console.error(chalk.red(`✗ Invalid field. Valid fields: ${validFields.join(", ")}`));
+  
+  // Map CLI field names to API field names
+  const fieldMapping = {
+    name: "name",
+    phone: "phone",
+    address: "address",
+    city: "city",
+    country: "country",
+    github: "githubUsername",
+    linkedin: "linkedinUrl",
+    skills: "skills",
+    bio: "bio",
+    available: "availableForHire",
+  };
+  
+  const apiField = fieldMapping[field];
+  if (!apiField) {
+    console.error(chalk.red(`✗ Invalid field. Valid fields: ${Object.keys(fieldMapping).join(", ")}`));
     return;
   }
-  const newValue = value.join(" ");
+  
+  let newValue = value.join(" ");
   if (!newValue) {
     console.error(chalk.red("✗ Value is required."));
     return;
   }
-  await apiPatch("/profile", { [field]: newValue });
+  
+  // Process special fields
+  let processedValue = newValue;
+  if (field === "skills") {
+    processedValue = newValue.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+  } else if (field === "available") {
+    processedValue = newValue.toLowerCase() === "true" || newValue === "1" || newValue === "yes";
+    newValue = processedValue ? "Available for hire ✓" : "Not looking";
+  }
+  
+  await apiPatch("/profile", { [apiField]: processedValue });
   console.log(chalk.green(`✓ Updated ${field} to "${newValue}"`));
 }
 
@@ -1451,8 +1496,10 @@ const commandGroups = {
   'Authentication': ['login', 'logout', 'register', 'auth', 'whoami', 'profile'],
   'Shopping': ['featured', 'deals', 'products', 'search', 'view', 'buy', 'categories'],
   'Cart & Orders': ['cart', 'add', 'checkout', 'orders'],
+  'Developer Jobs': ['jobs', 'job', 'apply', 'applications'],
   'Stores': ['sellers', 'store', 'reviews', 'where'],
   'AI Services': ['ai', 'credits', 'topup'],
+  'On-Demand Tasks': ['tasks', 'task'],
   'Personalization': ['alias', 'reward'],
   'System': ['start', 'doctor', 'config', 'help', 'about']
 };
@@ -1609,8 +1656,10 @@ function showHelp(commandName = null, mode = 'basic') {
       'Authentication': chalk.blue,
       'Shopping': chalk.green,
       'Cart & Orders': chalk.yellow,
-      'Stores': chalk.magenta,
+      'Developer Jobs': chalk.magenta,
+      'Stores': chalk.cyan,
       'AI Services': chalk.cyan,
+      'On-Demand Tasks': chalk.yellow,
       'Personalization': chalk.white,
       'System': chalk.gray
     };
@@ -1619,8 +1668,10 @@ function showHelp(commandName = null, mode = 'basic') {
       'Authentication': '🔐',
       'Shopping': '🛒',
       'Cart & Orders': '📦',
+      'Developer Jobs': '💼',
       'Stores': '🏪',
       'AI Services': '🤖',
+      'On-Demand Tasks': '⚡',
       'Personalization': '⚙️',
       'System': '💻'
     };
@@ -1957,13 +2008,6 @@ library
   });
 
 program
-  .command("lib")
-  .description("Shortcut: tm library list")
-  .action(async () => {
-    program.parse(["tm", "library", "list"]);
-  });
-
-program
   .command("keys")
   .description("Show your license keys")
   .action(async () => {
@@ -2079,31 +2123,31 @@ program
   });
 
 // -----------------
-// Jobs Commands (On-Demand Services)
+// Tasks Commands (On-Demand Services) - renamed from "jobs"
 // -----------------
-const jobs = program
-  .command("jobs")
-  .description("Your on-demand service jobs");
+const tasks = program
+  .command("tasks")
+  .description("Your on-demand service tasks");
 
-jobs
+tasks
   .command("list")
-  .description("List all your jobs")
+  .description("List all your tasks")
   .action(async () => {
     try {
-      const spinner = createSpinner("Fetching jobs...");
+      const spinner = createSpinner("Fetching tasks...");
       const data = await apiGet("/jobs");
       stopSpinner(spinner);
       
       if (!data?.length) {
-        showInfoBox("No jobs yet", "Purchase on-demand services to see your jobs here\n💡 On-demand services execute tasks for you (SEO audits, code conversions, etc.)");
+        showInfoBox("No tasks yet", "Purchase on-demand services to see your tasks here\n💡 On-demand services execute tasks for you (SEO audits, code conversions, etc.)");
         return;
       }
       
-      showSection("Your Jobs");
-      console.log(chalk.dim("  Job ID                       Service               Status       Created"));
+      showSection("Your Tasks");
+      console.log(chalk.dim("  Task ID                      Service               Status       Created"));
       console.log(chalk.dim("  ─".repeat(40)));
       
-      for (const job of data) {
+      for (const task of data) {
         const statusIcon = {
           'pending_payment': chalk.yellow("⏳"),
           'queued': chalk.blue("📋"),
@@ -2111,7 +2155,7 @@ jobs
           'dispatched': chalk.cyan("⏳"),
           'completed': chalk.green("✓"),
           'failed': chalk.red("✗"),
-        }[job.status] || "•";
+        }[task.status] || "•";
         
         const statusColor = {
           'pending_payment': chalk.yellow,
@@ -2120,29 +2164,29 @@ jobs
           'dispatched': chalk.cyan,
           'completed': chalk.green,
           'failed': chalk.red,
-        }[job.status] || chalk.gray;
+        }[task.status] || chalk.gray;
         
-        const date = new Date(job.createdAt).toLocaleDateString();
-        console.log(`  ${statusIcon} ${chalk.white(job.jobId.padEnd(26))} ${chalk.cyan((job.productName || 'Unknown').substring(0, 20).padEnd(20))} ${statusColor(job.status.padEnd(12))} ${chalk.dim(date)}`);
+        const date = new Date(task.createdAt).toLocaleDateString();
+        console.log(`  ${statusIcon} ${chalk.white(task.jobId.padEnd(26))} ${chalk.cyan((task.productName || 'Unknown').substring(0, 20).padEnd(20))} ${statusColor(task.status.padEnd(12))} ${chalk.dim(date)}`);
       }
       
       console.log();
-      showNextSteps(["tm job <job_id> — view job details and results"]);
+      showNextSteps(["tm task <task_id> — view task details and results"]);
     } catch (error) {
-      showError(error.message || "Failed to fetch jobs");
+      showError(error.message || "Failed to fetch tasks");
     }
   });
 
 program
-  .command("job <jobId>")
-  .description("View job details and results")
-  .action(async (jobId) => {
+  .command("task <taskId>")
+  .description("View task details and results")
+  .action(async (taskId) => {
     try {
-      const spinner = createSpinner("Fetching job details...");
-      const job = await apiGet(`/jobs/${jobId}`);
+      const spinner = createSpinner("Fetching task details...");
+      const task = await apiGet(`/jobs/${taskId}`);
       stopSpinner(spinner);
       
-      showSection(`Job: ${job.jobId}`);
+      showSection(`Task: ${task.jobId}`);
       console.log();
       
       const statusIcon = {
@@ -2152,28 +2196,28 @@ program
         'dispatched': '⏳ Waiting for Result',
         'completed': '✅ Completed',
         'failed': '❌ Failed',
-      }[job.status] || job.status;
+      }[task.status] || task.status;
       
-      console.log(`  ${chalk.dim("Service:")} ${chalk.white(job.productName || 'Unknown')}`);
-      console.log(`  ${chalk.dim("Status:")}  ${job.status === 'completed' ? chalk.green(statusIcon) : job.status === 'failed' ? chalk.red(statusIcon) : chalk.yellow(statusIcon)}`);
-      console.log(`  ${chalk.dim("Created:")} ${new Date(job.createdAt).toLocaleString()}`);
+      console.log(`  ${chalk.dim("Service:")} ${chalk.white(task.productName || 'Unknown')}`);
+      console.log(`  ${chalk.dim("Status:")}  ${task.status === 'completed' ? chalk.green(statusIcon) : task.status === 'failed' ? chalk.red(statusIcon) : chalk.yellow(statusIcon)}`);
+      console.log(`  ${chalk.dim("Created:")} ${new Date(task.createdAt).toLocaleString()}`);
       
-      if (job.completedAt) {
-        console.log(`  ${chalk.dim("Completed:")} ${new Date(job.completedAt).toLocaleString()}`);
+      if (task.completedAt) {
+        console.log(`  ${chalk.dim("Completed:")} ${new Date(task.completedAt).toLocaleString()}`);
       }
       
-      if (job.inputData && Object.keys(job.inputData).length > 0) {
+      if (task.inputData && Object.keys(task.inputData).length > 0) {
         console.log();
         console.log(chalk.dim("  ─ Input Data ─"));
-        for (const [key, value] of Object.entries(job.inputData)) {
+        for (const [key, value] of Object.entries(task.inputData)) {
           console.log(`  ${chalk.cyan(key)}: ${chalk.white(String(value))}`);
         }
       }
       
-      if (job.status === 'completed' && job.resultData) {
+      if (task.status === 'completed' && task.resultData) {
         console.log();
         console.log(chalk.green("  ─ Result ─"));
-        for (const [key, value] of Object.entries(job.resultData)) {
+        for (const [key, value] of Object.entries(task.resultData)) {
           if (typeof value === 'string' && value.startsWith('http')) {
             console.log(`  ${chalk.cyan(key)}: ${chalk.underline.blue(value)}`);
           } else {
@@ -2182,20 +2226,207 @@ program
         }
       }
       
-      if (job.status === 'failed' && job.resultData?.error) {
+      if (task.status === 'failed' && task.resultData?.error) {
         console.log();
-        console.log(chalk.red(`  Error: ${job.resultData.error}`));
+        console.log(chalk.red(`  Error: ${task.resultData.error}`));
       }
       
-      if (job.lastDispatchError) {
+      if (task.lastDispatchError) {
         console.log();
-        console.log(chalk.dim(`  Dispatch attempts: ${job.dispatchAttempts}`));
-        console.log(chalk.dim(`  Last error: ${job.lastDispatchError}`));
+        console.log(chalk.dim(`  Dispatch attempts: ${task.dispatchAttempts}`));
+        console.log(chalk.dim(`  Last error: ${task.lastDispatchError}`));
       }
       
       console.log();
     } catch (error) {
-      showError(error.message || "Failed to fetch job");
+      showError(error.message || "Failed to fetch task");
+    }
+  });
+
+// -----------------
+// Jobs Commands (Developer Job Board)
+// -----------------
+program
+  .command("jobs [query...]")
+  .description("Browse developer job vacancies")
+  .option("-t, --type <type>", "Work type: remote, contract, freelance")
+  .option("-l, --level <level>", "Experience: junior, middle, senior, lead")
+  .option("-s, --skills <skills>", "Required skills (comma-separated)")
+  .option("--location <location>", "Location filter")
+  .option("--limit <n>", "Limit results", "20")
+  .action(async (query, opts) => {
+    try {
+      const spinner = createSpinner("Fetching vacancies...");
+      
+      const params = new URLSearchParams();
+      if (query?.length) params.set("q", query.join(" "));
+      if (opts.type) params.set("workType", opts.type);
+      if (opts.level) params.set("experienceLevel", opts.level);
+      if (opts.skills) params.set("skills", opts.skills);
+      if (opts.location) params.set("location", opts.location);
+      if (opts.limit) params.set("limit", opts.limit);
+      
+      const url = `/vacancies${params.toString() ? "?" + params.toString() : ""}`;
+      const vacancies = await apiGet(url);
+      stopSpinner(spinner);
+      
+      if (!vacancies?.length) {
+        showInfoBox("No vacancies found", "Try different filters or check back later\n💡 tm jobs --type=remote");
+        return;
+      }
+      
+      showSection(`💼 Developer Jobs (${vacancies.length})`);
+      console.log();
+      
+      vacancies.forEach((v, i) => {
+        const workIcon = { remote: '🌍', contract: '📝', freelance: '💼', hybrid: '🏢' }[v.workType] || '📍';
+        const salary = (v.salaryMin || v.salaryMax) 
+          ? chalk.green(` $${v.salaryMin || '?'}k-${v.salaryMax || '?'}k`) 
+          : '';
+        const skills = v.requiredSkills?.slice(0, 3).join(', ') || '';
+        
+        console.log(`  ${chalk.dim(`${i + 1}.`)} ${chalk.white.bold(v.title)}`);
+        console.log(`     ${workIcon} ${v.workType}${salary}${skills ? chalk.dim(` | ${skills}`) : ''}`);
+        console.log(`     ${chalk.dim('@ ' + (v.seller?.name || 'Unknown'))} • ${chalk.dim(v.applicationCount || 0)} applicants`);
+        console.log();
+      });
+      
+      showNextSteps([
+        "tm job <number>   — view vacancy details",
+        "tm apply <number> — apply for job"
+      ]);
+    } catch (error) {
+      showError(error.message || "Failed to fetch vacancies");
+    }
+  });
+
+program
+  .command("job <id>")
+  .description("View job vacancy details")
+  .action(async (id) => {
+    try {
+      const spinner = createSpinner("Fetching vacancy...");
+      const v = await apiGet(`/vacancies/${id}`);
+      stopSpinner(spinner);
+      
+      const workTypes = { remote: '🌍 Remote', contract: '📝 Contract', freelance: '💼 Freelance', hybrid: '🏢 Hybrid', onsite: '📍 On-site' };
+      const levels = { junior: '🌱 Junior', middle: '💪 Middle', senior: '⭐ Senior', lead: '👑 Lead', any: 'Any level' };
+      
+      console.log();
+      console.log(chalk.green.bold('  ╔' + '═'.repeat(50) + '╗'));
+      console.log(chalk.green.bold('  ║') + chalk.white.bold(`  ${v.title}`.padEnd(50)) + chalk.green.bold('║'));
+      console.log(chalk.green.bold('  ╚' + '═'.repeat(50) + '╝'));
+      console.log();
+      
+      console.log(`  ${chalk.dim("Company:")}     ${chalk.white(v.seller?.name || 'Unknown')}`);
+      console.log(`  ${chalk.dim("Work Type:")}   ${workTypes[v.workType] || v.workType}`);
+      console.log(`  ${chalk.dim("Experience:")}  ${levels[v.experienceLevel] || 'Any'}`);
+      console.log(`  ${chalk.dim("Location:")}    ${v.location || 'Anywhere'}`);
+      
+      if (v.salaryMin || v.salaryMax) {
+        const salary = v.salaryMin && v.salaryMax 
+          ? `$${v.salaryMin.toLocaleString()} - $${v.salaryMax.toLocaleString()}`
+          : v.salaryMin ? `From $${v.salaryMin.toLocaleString()}` : `Up to $${v.salaryMax.toLocaleString()}`;
+        console.log(`  ${chalk.dim("Salary:")}      ${chalk.green(salary)}`);
+      }
+      
+      console.log(`  ${chalk.dim("Views:")}       ${v.viewCount || 0}`);
+      console.log(`  ${chalk.dim("Applications:")} ${v.applicationCount || 0}`);
+      
+      if (v.requiredSkills?.length) {
+        console.log();
+        console.log(`  ${chalk.dim("Skills:")} ${v.requiredSkills.map(s => chalk.cyan(s)).join(', ')}`);
+      }
+      
+      if (v.description) {
+        console.log();
+        console.log(chalk.dim("  ─ Description ─"));
+        console.log(`  ${v.description}`);
+      }
+      
+      console.log();
+      console.log(chalk.dim("  ─".repeat(25)));
+      console.log(`  ${chalk.green('Apply:')} tm apply ${id}`);
+      if (v.applyUrl) {
+        console.log(`  ${chalk.dim('External:')} ${chalk.underline.blue(v.applyUrl)}`);
+      }
+      console.log();
+    } catch (error) {
+      showError(error.message || "Vacancy not found");
+    }
+  });
+
+program
+  .command("apply <vacancyId>")
+  .description("Apply to a job vacancy")
+  .option("-c, --cover <text>", "Cover letter")
+  .action(async (vacancyId, opts) => {
+    try {
+      const spinner = createSpinner("Submitting application...");
+      
+      const payload = {};
+      if (opts.cover) payload.coverLetter = opts.cover;
+      
+      const app = await apiPost(`/vacancies/${vacancyId}/apply`, payload);
+      stopSpinner(spinner);
+      
+      showSuccessBox("Application Submitted!", 
+        `Application ID: ${app.applicationId}\nStatus: Pending\n\nThe employer will review your profile and contact you.`);
+      
+      showNextSteps([
+        "tm applications — view your applications",
+        "tm profile      — update your profile"
+      ]);
+    } catch (error) {
+      if (error.message?.includes("401")) {
+        showError("Login required. Run: tm login <email>");
+      } else {
+        showError(error.message || "Failed to submit application");
+      }
+    }
+  });
+
+program
+  .command("applications")
+  .alias("apps")
+  .description("View your job applications")
+  .action(async () => {
+    try {
+      const spinner = createSpinner("Fetching applications...");
+      const apps = await apiGet("/applications");
+      stopSpinner(spinner);
+      
+      if (!apps?.length) {
+        showInfoBox("No applications yet", "Apply to jobs to see your applications here\n💡 tm jobs — browse vacancies");
+        return;
+      }
+      
+      showSection(`📋 My Applications (${apps.length})`);
+      console.log();
+      
+      const statusIcons = {
+        pending: chalk.yellow('⏳'),
+        reviewed: chalk.blue('👀'),
+        shortlisted: chalk.green('⭐'),
+        rejected: chalk.red('❌'),
+        hired: chalk.green('✅')
+      };
+      
+      apps.forEach((a, i) => {
+        const date = new Date(a.createdAt).toLocaleDateString();
+        const status = statusIcons[a.status] || a.status;
+        
+        console.log(`  ${chalk.dim(`${i + 1}.`)} ${chalk.white(a.vacancy?.title || 'Unknown Position')}`);
+        console.log(`     ${chalk.dim('@ ' + (a.vacancy?.seller?.name || 'Unknown'))} | Applied: ${date}`);
+        console.log(`     Status: ${status} ${a.status}`);
+        console.log();
+      });
+    } catch (error) {
+      if (error.message?.includes("401")) {
+        showError("Login required. Run: tm login <email>");
+      } else {
+        showError(error.message || "Failed to fetch applications");
+      }
     }
   });
 
