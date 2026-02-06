@@ -1357,6 +1357,81 @@ program
   });
 
 // -----------------
+// book (services)
+// -----------------
+program
+  .command("book <serviceIdOrSlug>")
+  .description("Book a service")
+  .option("--date <date>", "Booking date (YYYY-MM-DD)")
+  .option("--time <time>", "Booking time (HH:MM)")
+  .option("--notes <notes>", "Additional notes")
+  .action(async (serviceIdOrSlug, opts) => {
+    try {
+      // Fetch product
+      let p = await apiGet(`/products/${encodeURIComponent(serviceIdOrSlug)}`).catch(() => null);
+      
+      if (!p) {
+        p = await apiGet(`/products/slug/${encodeURIComponent(serviceIdOrSlug)}`).catch(() => null);
+      }
+      
+      if (!p) {
+        console.error(chalk.red("Service not found"));
+        process.exitCode = 1;
+        return;
+      }
+      
+      // Verify this is a service
+      if (p.productKind !== 'service') {
+        console.error(chalk.red("This is not a service. Use 'tm buy' for products."));
+        process.exitCode = 1;
+        return;
+      }
+      
+      const buyUrl = p.checkoutUrl || p.buyUrl;
+      if (!buyUrl) {
+        console.log(chalk.yellow("This service has no checkout link yet."));
+        process.exitCode = 1;
+        return;
+      }
+      
+      // Create booking intent
+      const intentResponse = await apiPost("/intents", {
+        source: "cli",
+        productId: p.id,
+        sellerId: p.storeId ?? null,
+        checkoutUrl: buyUrl,
+        orderType: "service",
+        bookingDate: opts.date,
+        bookingTime: opts.time,
+        bookingNotes: opts.notes,
+      });
+      
+      let intentId = intentResponse.intentId ?? null;
+      let redirectUrl = buyUrl;
+      
+      if (intentResponse.redirectUrl) {
+        redirectUrl = intentResponse.redirectUrl;
+      } else if (intentId) {
+        const sep = buyUrl.includes("?") ? "&" : "?";
+        redirectUrl = `${buyUrl}${sep}tm_intent=${intentId}`;
+      }
+      
+      console.log();
+      console.log(chalk.green.bold("  Opening booking..."));
+      console.log(chalk.dim(`  ${p.name}`));
+      if (opts.date) console.log(chalk.dim(`  Date: ${opts.date}`));
+      if (opts.time) console.log(chalk.dim(`  Time: ${opts.time}`));
+      console.log(chalk.dim(`  ${redirectUrl}`));
+      console.log();
+      
+      await open(redirectUrl);
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+      process.exitCode = 1;
+    }
+  });
+
+// -----------------
 // sellers
 // -----------------
 program
@@ -1487,6 +1562,126 @@ program
     console.log();
   });
 
+program
+  .command("stats")
+  .description("Market statistics")
+  .action(async () => {
+    try {
+      const stats = await apiGet("/stats");
+      
+      console.log();
+      console.log(chalk.green.bold('  📊 Market Statistics'));
+      console.log(chalk.dim('  ─────────────────────────────────────────'));
+      console.log();
+      console.log(`  ${chalk.dim('Total Sellers:')}  ${chalk.white(stats.totalSellers || 0)}`);
+      console.log(`  ${chalk.dim('Total Products:')} ${chalk.white(stats.totalProducts || 0)}`);
+      console.log(`  ${chalk.dim('Countries:')}      ${chalk.white(stats.countries || 0)}`);
+      console.log(`  ${chalk.dim('Categories:')}     ${chalk.white(stats.categories || 0)}`);
+      console.log();
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+      process.exitCode = 1;
+    }
+  });
+
+program
+  .command("policy")
+  .alias("terms")
+  .description("Terms of service")
+  .action(() => {
+    console.log();
+    console.log(chalk.green.bold('  📜 Terms of Service'));
+    console.log(chalk.dim('  ─────────────────────────────────────────'));
+    console.log();
+    console.log(chalk.white('  Platform Role:'));
+    console.log(chalk.dim('    TerminalMarket connects buyers with independent sellers.'));
+    console.log(chalk.dim('    We facilitate the connection but don\'t sell directly.'));
+    console.log();
+    console.log(chalk.white('  Seller Responsibility:'));
+    console.log(chalk.dim('    • Product quality and accuracy'));
+    console.log(chalk.dim('    • Order fulfillment and shipping'));
+    console.log(chalk.dim('    • Customer service and support'));
+    console.log(chalk.dim('    • Refunds (per their own policies)'));
+    console.log();
+    console.log(chalk.white('  Buyer Rights:'));
+    console.log(chalk.dim('    • Contact sellers directly for issues'));
+    console.log(chalk.dim('    • Report problematic sellers'));
+    console.log(chalk.dim('    • Leave honest reviews'));
+    console.log();
+  });
+
+program
+  .command("privacy")
+  .description("Privacy policy")
+  .action(() => {
+    console.log();
+    console.log(chalk.green.bold('  🔒 Privacy Policy'));
+    console.log(chalk.dim('  ─────────────────────────────────────────'));
+    console.log();
+    console.log(chalk.white('  Data We Collect:'));
+    console.log(chalk.dim('    • Account information (email, username)'));
+    console.log(chalk.dim('    • Order history and preferences'));
+    console.log(chalk.dim('    • Usage data for platform improvement'));
+    console.log();
+    console.log(chalk.white('  Data We Share:'));
+    console.log(chalk.dim('    • Order details with sellers for fulfillment'));
+    console.log(chalk.dim('    • Payment info with Stripe'));
+    console.log(chalk.dim('    • We never sell your data'));
+    console.log();
+    console.log(chalk.white('  Your Rights:'));
+    console.log(chalk.dim('    • Request a copy of your data'));
+    console.log(chalk.dim('    • Delete your account'));
+    console.log(chalk.dim('    • Opt out of marketing'));
+    console.log();
+  });
+
+program
+  .command("faq")
+  .description("Frequently asked questions")
+  .action(() => {
+    console.log();
+    console.log(chalk.green.bold('  ❓ FAQ'));
+    console.log(chalk.dim('  ─────────────────────────────────────────'));
+    console.log();
+    console.log(chalk.cyan('  Q: Is TerminalMarket free to use?'));
+    console.log(chalk.dim('  A: Yes! Browsing and buying is free. We charge sellers a commission.'));
+    console.log();
+    console.log(chalk.cyan('  Q: Who do I contact if my order has issues?'));
+    console.log(chalk.dim('  A: Contact the seller first. If unresponsive, email support@terminalmarket.app'));
+    console.log();
+    console.log(chalk.cyan('  Q: How are sellers verified?'));
+    console.log(chalk.dim('  A: We verify identity and payment info. Look for the verified badge.'));
+    console.log();
+    console.log(chalk.cyan('  Q: Can I get a refund?'));
+    console.log(chalk.dim('  A: Refund policies are set by sellers. Check product listing before buying.'));
+    console.log();
+    console.log(chalk.cyan('  Q: How do I become a seller?'));
+    console.log(chalk.dim('  A: Visit the merchant portal. We offer Free, Basic, and Premium tiers.'));
+    console.log();
+  });
+
+program
+  .command("contact")
+  .alias("support")
+  .description("Contact & support")
+  .action(() => {
+    console.log();
+    console.log(chalk.green.bold('  📞 Contact & Support'));
+    console.log(chalk.dim('  ─────────────────────────────────────────'));
+    console.log();
+    console.log(chalk.white('  For Order Issues:'));
+    console.log(chalk.dim('    Contact the seller directly first.'));
+    console.log();
+    console.log(chalk.white('  For Platform Issues:'));
+    console.log(chalk.dim('    Email: support@terminalmarket.app'));
+    console.log();
+    console.log(chalk.white('  For Sellers:'));
+    console.log(chalk.dim('    Email: merchants@terminalmarket.app'));
+    console.log();
+    console.log(chalk.dim('  Response time: 24-48 hours on business days'));
+    console.log();
+  });
+
 // -----------------
 // help
 // -----------------
@@ -1494,20 +1689,21 @@ program
 // Command groups for organized help
 const commandGroups = {
   'Authentication': ['login', 'logout', 'register', 'auth', 'whoami', 'profile'],
-  'Shopping': ['featured', 'deals', 'products', 'search', 'view', 'buy', 'categories'],
+  'Shopping': ['featured', 'deals', 'products', 'search', 'view', 'buy', 'book', 'open', 'categories'],
   'Cart & Orders': ['cart', 'add', 'checkout', 'orders'],
   'Developer Jobs': ['jobs', 'job', 'apply', 'applications'],
   'Stores': ['sellers', 'store', 'reviews', 'where'],
   'AI Services': ['ai', 'credits', 'topup'],
   'On-Demand Tasks': ['tasks', 'task'],
   'Personalization': ['alias', 'reward'],
-  'System': ['start', 'doctor', 'config', 'help', 'about']
+  'Info': ['about', 'stats', 'policy', 'privacy', 'faq', 'contact'],
+  'System': ['start', 'doctor', 'config', 'help']
 };
 
 // Command groups by level
 const basicGroups = {
   'Get Started': ['start', 'where', 'doctor'],
-  'Shop': ['featured', 'deals', 'products', 'search', 'buy', 'view'],
+  'Shop': ['featured', 'deals', 'products', 'search', 'buy', 'book', 'view', 'open'],
   'Account': ['login', 'register', 'whoami', 'profile']
 };
 
@@ -1661,6 +1857,7 @@ function showHelp(commandName = null, mode = 'basic') {
       'AI Services': chalk.cyan,
       'On-Demand Tasks': chalk.yellow,
       'Personalization': chalk.white,
+      'Info': chalk.dim,
       'System': chalk.gray
     };
     
@@ -1673,6 +1870,7 @@ function showHelp(commandName = null, mode = 'basic') {
       'AI Services': '🤖',
       'On-Demand Tasks': '⚡',
       'Personalization': '⚙️',
+      'Info': 'ℹ️',
       'System': '💻'
     };
     
