@@ -1,6 +1,6 @@
 {
   "name": "terminalmarket",
-  "version": "0.10.1",
+  "version": "0.10.5",
   "description": "TerminalMarket CLI — a curated marketplace for developers & founders (client for terminalmarket.app)",
   "bin": {
     "tm": "bin/tm.js"
