@@ -1263,6 +1263,189 @@ program
   });
 
 // -----------------
+// webhook - custom notifications
+// -----------------
+const webhook = program
+  .command("webhook")
+  .description("Manage custom webhook notifications");
+
+webhook
+  .command("list")
+  .description("Show your webhooks")
+  .action(async () => {
+    try {
+      const webhooks = await apiGet("/user/webhooks");
+      if (!webhooks || webhooks.length === 0) {
+        console.log(chalk.yellow("No webhooks configured."));
+        console.log(chalk.dim("Create one: tm webhook add <name> <url> [events]"));
+        return;
+      }
+      console.log(chalk.bold("\nYour Webhooks\n"));
+      webhooks.forEach((w) => {
+        const status = w.active ? chalk.green("✓") : chalk.dim("○");
+        console.log(`${status} #${w.id} ${chalk.bold(w.name)}`);
+        console.log(`   ${chalk.dim("URL:")} ${w.url.substring(0, 60)}${w.url.length > 60 ? "..." : ""}`);
+        console.log(`   ${chalk.dim("Events:")} ${w.events.join(", ")}`);
+        console.log(`   ${chalk.dim("Stats:")} ${w.totalSent} sent, ${w.totalFailed} failed`);
+        console.log();
+      });
+    } catch (e) {
+      if (e?.message?.includes("401")) {
+        console.log(chalk.yellow("Please login first: tm login"));
+      } else {
+        console.error(chalk.red(e?.message || String(e)));
+      }
+    }
+  });
+
+webhook
+  .command("add <name> <url> [events]")
+  .description("Create a new webhook")
+  .action(async (name, url, events) => {
+    try {
+      const eventsList = events 
+        ? events.split(",").map(e => e.trim())
+        : ["order.created", "order.completed", "price.alert", "subscription.processed", "reward.triggered", "wishlist.price_drop"];
+      
+      const result = await apiPost("/user/webhooks", { name, url, events: eventsList });
+      
+      console.log(chalk.green(`✓ Webhook created!`));
+      console.log();
+      console.log(`${chalk.dim("ID:")} ${result.id}`);
+      console.log(`${chalk.dim("Name:")} ${result.name}`);
+      console.log(`${chalk.dim("URL:")} ${result.url}`);
+      console.log(`${chalk.dim("Events:")} ${result.events.join(", ")}`);
+      console.log();
+      console.log(chalk.yellow("SECRET (save this - won't be shown again):"));
+      console.log(chalk.bold(result.secret));
+      console.log();
+      console.log(chalk.dim("Test with: tm webhook test " + result.id));
+    } catch (e) {
+      if (e?.message?.includes("401")) {
+        console.log(chalk.yellow("Please login first: tm login"));
+      } else {
+        console.error(chalk.red(e?.message || String(e)));
+      }
+    }
+  });
+
+webhook
+  .command("test <id>")
+  .description("Send a test event to webhook")
+  .action(async (id) => {
+    try {
+      const result = await apiPost(`/user/webhooks/${id}/test`);
+      if (result.success) {
+        console.log(chalk.green(`✓ Test webhook sent successfully!`));
+        console.log(chalk.dim(`HTTP Status: ${result.httpStatus}`));
+      } else {
+        console.log(chalk.red(`✗ Test webhook failed`));
+        console.log(chalk.dim(`Error: ${result.error}`));
+      }
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+    }
+  });
+
+webhook
+  .command("toggle <id>")
+  .description("Enable/disable webhook")
+  .action(async (id) => {
+    try {
+      // Get current state
+      const webhooks = await apiGet("/user/webhooks");
+      const hook = webhooks.find(w => w.id === parseInt(id));
+      if (!hook) {
+        console.log(chalk.red(`Webhook #${id} not found`));
+        return;
+      }
+      
+      await apiPatch(`/user/webhooks/${id}`, { active: !hook.active });
+      console.log(chalk.green(`Webhook #${id} ${!hook.active ? "enabled" : "disabled"}`));
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+    }
+  });
+
+webhook
+  .command("delete <id>")
+  .description("Delete a webhook")
+  .action(async (id) => {
+    try {
+      await apiDelete(`/user/webhooks/${id}`);
+      console.log(chalk.green(`Webhook #${id} deleted`));
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+    }
+  });
+
+webhook
+  .command("history <id>")
+  .description("Show delivery history for a webhook")
+  .action(async (id) => {
+    try {
+      const deliveries = await apiGet(`/user/webhooks/${id}/deliveries?limit=10`);
+      if (!deliveries || deliveries.length === 0) {
+        console.log(chalk.yellow(`No delivery history for webhook #${id}`));
+        return;
+      }
+      console.log(chalk.bold(`\nDelivery History (last 10)\n`));
+      deliveries.forEach((d) => {
+        const status = d.status === "delivered" ? chalk.green("✓") : chalk.red("✗");
+        const time = new Date(d.createdAt).toLocaleString();
+        console.log(`${status} ${d.eventType} | ${d.httpStatus || "-"} | ${time}`);
+        if (d.errorMessage) console.log(chalk.dim(`   Error: ${d.errorMessage}`));
+      });
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+    }
+  });
+
+webhook
+  .command("events")
+  .description("Show available webhook events")
+  .action(() => {
+    console.log(chalk.bold("\nAvailable Webhook Events\n"));
+    const events = {
+      "order.created": "When a new order is placed",
+      "order.completed": "When an order is completed",
+      "price.alert": "When wishlist item price drops to target",
+      "subscription.processed": "When a subscription order runs",
+      "reward.triggered": "When a reward rule triggers",
+      "wishlist.price_drop": "When any wishlist item price drops",
+    };
+    Object.entries(events).forEach(([event, desc]) => {
+      console.log(`  ${chalk.cyan(event)}`);
+      console.log(`    ${chalk.dim(desc)}`);
+    });
+    console.log();
+    console.log(chalk.dim("Usage: tm webhook add <name> <url> order.created,price.alert"));
+  });
+
+program
+  .command("hooks")
+  .description("Show webhooks (shortcut)")
+  .action(async () => {
+    try {
+      const webhooks = await apiGet("/user/webhooks");
+      if (!webhooks || webhooks.length === 0) {
+        console.log(chalk.yellow("No webhooks. Add: tm webhook add <name> <url>"));
+        return;
+      }
+      webhooks.forEach((w) => {
+        const status = w.active ? "✓" : "○";
+        console.log(`${status} #${w.id} ${w.name} - ${w.events.length} events`);
+      });
+    } catch (e) {
+      if (e?.message?.includes("401")) {
+        console.log(chalk.yellow("Please login first: tm login"));
+      } else {
+        console.error(chalk.red(e?.message || String(e)));
+      }
+    }
+  });
+
+// -----------------
 // categories
 // -----------------
 program
@@ -2009,7 +2192,7 @@ const advancedGroups = {
   'Cart & Orders': ['cart', 'add', 'checkout', 'orders'],
   'AI Services': ['ai', 'credits', 'topup'],
   'Stores': ['sellers', 'store', 'reviews'],
-  'Automation': ['alias', 'reward', 'subscribe', 'wishlist']
+  'Automation': ['alias', 'reward', 'subscribe', 'wishlist', 'webhook']
 };
 
 // Custom help formatter
