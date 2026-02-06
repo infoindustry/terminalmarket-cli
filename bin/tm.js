@@ -965,6 +965,304 @@ program
   });
 
 // -----------------
+// subscriptions (recurring orders)
+// -----------------
+const DAYS_SHORT = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const DAYS_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+const subscribe = program
+  .command("subscribe")
+  .description("Manage recurring order subscriptions");
+
+subscribe
+  .command("list")
+  .description("List your subscriptions")
+  .action(async () => {
+    try {
+      const subs = await apiGet("/subscriptions");
+      if (!subs || subs.length === 0) {
+        console.log(chalk.yellow("No subscriptions yet."));
+        console.log(chalk.dim("Create one: tm subscribe add <productId> <frequency> [options]"));
+        return;
+      }
+      console.log(chalk.bold("\nYour Subscriptions\n"));
+      subs.forEach(s => {
+        const status = s.status === 'active' ? chalk.green("✓") : 
+                       s.status === 'paused' ? chalk.yellow("⏸") : chalk.dim("✗");
+        const schedule = formatSchedule(s.frequency, s.dayOfWeek, s.dayOfMonth, s.timeOfDay);
+        const next = s.nextOrderAt ? new Date(s.nextOrderAt).toLocaleDateString() : '-';
+        console.log(`${status} #${s.id} ${chalk.cyan(s.name || 'Subscription')}`);
+        console.log(`   ${chalk.dim('Product:')} ${s.product?.name || `ID #${s.productId}`}`);
+        console.log(`   ${chalk.dim('Schedule:')} ${schedule}`);
+        console.log(`   ${chalk.dim('Next:')} ${next}  ${chalk.dim('Orders:')} ${s.totalOrders}`);
+        console.log();
+      });
+    } catch (e) {
+      if (e?.message?.includes("401")) {
+        console.log(chalk.yellow("Please login first: tm login"));
+      } else {
+        console.error(chalk.red(e?.message || String(e)));
+      }
+    }
+  });
+
+function formatSchedule(frequency, dayOfWeek, dayOfMonth, timeOfDay) {
+  const time = timeOfDay || '09:00';
+  if (frequency === 'daily') return `Daily at ${time}`;
+  if (frequency === 'weekly' && dayOfWeek != null) return `${DAYS_FULL[dayOfWeek]} at ${time}`;
+  if (frequency === 'monthly' && dayOfMonth != null) {
+    const suffix = dayOfMonth > 3 && dayOfMonth < 21 ? 'th' : 
+                   dayOfMonth % 10 === 1 ? 'st' : 
+                   dayOfMonth % 10 === 2 ? 'nd' : 
+                   dayOfMonth % 10 === 3 ? 'rd' : 'th';
+    return `${dayOfMonth}${suffix} of month at ${time}`;
+  }
+  return frequency;
+}
+
+subscribe
+  .command("add <productId> <frequency>")
+  .description("Create a subscription (daily/weekly/monthly)")
+  .option("-d, --day <day>", "Day of week (mon-sun) for weekly, or day number (1-31) for monthly")
+  .option("-t, --time <time>", "Time of day (HH:MM)", "09:00")
+  .option("-n, --name <name>", "Subscription name")
+  .action(async (productId, frequency, options) => {
+    try {
+      const validFreq = ['daily', 'weekly', 'monthly'];
+      if (!validFreq.includes(frequency)) {
+        console.log(chalk.red(`Invalid frequency. Use: ${validFreq.join(', ')}`));
+        return;
+      }
+      
+      const payload = {
+        productId: parseInt(productId),
+        frequency,
+        timeOfDay: options.time,
+        name: options.name,
+      };
+      
+      if (frequency === 'weekly') {
+        const dayIndex = DAYS_SHORT.indexOf(options.day?.toLowerCase());
+        if (dayIndex === -1) {
+          console.log(chalk.red("Weekly requires --day (mon, tue, wed, thu, fri, sat, sun)"));
+          return;
+        }
+        payload.dayOfWeek = dayIndex;
+      }
+      
+      if (frequency === 'monthly') {
+        const dayNum = parseInt(options.day);
+        if (isNaN(dayNum) || dayNum < 1 || dayNum > 31) {
+          console.log(chalk.red("Monthly requires --day (1-31)"));
+          return;
+        }
+        payload.dayOfMonth = dayNum;
+      }
+      
+      const sub = await apiPost("/subscriptions", payload);
+      console.log(chalk.green(`\n✓ Subscription created!`));
+      console.log(`  ${chalk.dim('Name:')} ${sub.name}`);
+      console.log(`  ${chalk.dim('Product:')} ${sub.product?.name || productId}`);
+      console.log(`  ${chalk.dim('Schedule:')} ${formatSchedule(sub.frequency, sub.dayOfWeek, sub.dayOfMonth, sub.timeOfDay)}`);
+      console.log(`  ${chalk.dim('Next order:')} ${new Date(sub.nextOrderAt).toLocaleString()}`);
+    } catch (e) {
+      if (e?.message?.includes("401")) {
+        console.log(chalk.yellow("Please login first: tm login"));
+      } else {
+        console.error(chalk.red(e?.message || String(e)));
+      }
+    }
+  });
+
+subscribe
+  .command("pause <id>")
+  .description("Pause a subscription")
+  .action(async (id) => {
+    try {
+      await apiPatch(`/subscriptions/${id}`, { status: 'paused' });
+      console.log(chalk.green(`Subscription #${id} paused.`));
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+    }
+  });
+
+subscribe
+  .command("resume <id>")
+  .description("Resume a paused subscription")
+  .action(async (id) => {
+    try {
+      await apiPatch(`/subscriptions/${id}`, { status: 'active' });
+      console.log(chalk.green(`Subscription #${id} resumed.`));
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+    }
+  });
+
+subscribe
+  .command("cancel <id>")
+  .description("Cancel a subscription")
+  .action(async (id) => {
+    try {
+      await apiDelete(`/subscriptions/${id}`);
+      console.log(chalk.green(`Subscription #${id} cancelled.`));
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+    }
+  });
+
+program
+  .command("subscriptions")
+  .description("List subscriptions (shortcut)")
+  .action(async () => {
+    try {
+      const subs = await apiGet("/subscriptions");
+      if (!subs || subs.length === 0) {
+        console.log(chalk.yellow("No subscriptions. Create: tm subscribe add <productId> <frequency>"));
+        return;
+      }
+      subs.forEach(s => {
+        const status = s.status === 'active' ? chalk.green("✓") : chalk.yellow("⏸");
+        const schedule = formatSchedule(s.frequency, s.dayOfWeek, s.dayOfMonth, s.timeOfDay);
+        console.log(`${status} #${s.id} ${s.name || 'Subscription'} - ${schedule}`);
+      });
+    } catch (e) {
+      if (e?.message?.includes("401")) {
+        console.log(chalk.yellow("Please login first: tm login"));
+      } else {
+        console.error(chalk.red(e?.message || String(e)));
+      }
+    }
+  });
+
+// -----------------
+// wishlist
+// -----------------
+const wishlist = program
+  .command("wishlist")
+  .description("Manage your wishlist (saved products)");
+
+wishlist
+  .command("list")
+  .description("Show your wishlist")
+  .action(async () => {
+    try {
+      const items = await apiGet("/wishlist");
+      if (!items || items.length === 0) {
+        console.log(chalk.yellow("Your wishlist is empty."));
+        console.log(chalk.dim("Add products: tm wishlist add <productId>"));
+        return;
+      }
+      console.log(chalk.bold("\nYour Wishlist\n"));
+      items.forEach((item, idx) => {
+        const priceChange = getPriceChangeStr(item.priceAtAdd, item.product?.price);
+        console.log(`${chalk.cyan(idx + 1 + ')')} ${item.product?.name || `Product #${item.productId}`}`);
+        console.log(`   ${chalk.dim('Price:')} ${item.product?.price || '?'}${priceChange}`);
+        if (item.note) console.log(`   ${chalk.dim('Note:')} ${item.note}`);
+        if (item.priceAlert) console.log(`   ${chalk.yellow('Alert:')} ${item.targetPrice}`);
+        console.log();
+      });
+    } catch (e) {
+      if (e?.message?.includes("401")) {
+        console.log(chalk.yellow("Please login first: tm login"));
+      } else {
+        console.error(chalk.red(e?.message || String(e)));
+      }
+    }
+  });
+
+function getPriceChangeStr(oldPrice, newPrice) {
+  if (!oldPrice || !newPrice) return '';
+  const old = parseFloat(oldPrice);
+  const curr = parseFloat(newPrice);
+  if (old === curr) return '';
+  const diff = curr - old;
+  if (diff < 0) return chalk.green(` ↓${Math.abs(diff).toFixed(2)}`);
+  return chalk.red(` ↑${diff.toFixed(2)}`);
+}
+
+wishlist
+  .command("add <productId>")
+  .description("Add product to wishlist")
+  .option("-n, --note <note>", "Add a note")
+  .action(async (productId, options) => {
+    try {
+      const item = await apiPost("/wishlist", {
+        productId: parseInt(productId),
+        note: options.note,
+      });
+      console.log(chalk.green(`✓ Added to wishlist: ${item.product?.name || productId}`));
+      if (options.note) console.log(chalk.dim(`  Note: ${options.note}`));
+    } catch (e) {
+      if (e?.message?.includes("401")) {
+        console.log(chalk.yellow("Please login first: tm login"));
+      } else {
+        console.error(chalk.red(e?.message || String(e)));
+      }
+    }
+  });
+
+wishlist
+  .command("remove <productId>")
+  .description("Remove from wishlist")
+  .action(async (productId) => {
+    try {
+      await apiDelete(`/wishlist/${productId}`);
+      console.log(chalk.green(`Removed from wishlist.`));
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+    }
+  });
+
+wishlist
+  .command("note <productId> <note...>")
+  .description("Add/update note on wishlist item")
+  .action(async (productId, note) => {
+    try {
+      await apiPatch(`/wishlist/${productId}`, { note: note.join(' ') });
+      console.log(chalk.green(`Note updated.`));
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+    }
+  });
+
+wishlist
+  .command("alert <productId> <price>")
+  .description("Set price drop alert")
+  .action(async (productId, price) => {
+    try {
+      await apiPatch(`/wishlist/${productId}`, { 
+        priceAlert: true,
+        targetPrice: price,
+      });
+      console.log(chalk.green(`Price alert set for ${price}`));
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+    }
+  });
+
+program
+  .command("wish")
+  .description("Show wishlist (shortcut)")
+  .action(async () => {
+    try {
+      const items = await apiGet("/wishlist");
+      if (!items || items.length === 0) {
+        console.log(chalk.yellow("Wishlist empty. Add: tm wishlist add <productId>"));
+        return;
+      }
+      items.forEach((item, idx) => {
+        console.log(`${idx + 1}) ${item.product?.name || item.productId} - ${item.product?.price || '?'}`);
+      });
+    } catch (e) {
+      if (e?.message?.includes("401")) {
+        console.log(chalk.yellow("Please login first: tm login"));
+      } else {
+        console.error(chalk.red(e?.message || String(e)));
+      }
+    }
+  });
+
+// -----------------
 // categories
 // -----------------
 program
@@ -1711,7 +2009,7 @@ const advancedGroups = {
   'Cart & Orders': ['cart', 'add', 'checkout', 'orders'],
   'AI Services': ['ai', 'credits', 'topup'],
   'Stores': ['sellers', 'store', 'reviews'],
-  'Automation': ['alias', 'reward']
+  'Automation': ['alias', 'reward', 'subscribe', 'wishlist']
 };
 
 // Custom help formatter
@@ -1836,7 +2134,7 @@ function showHelp(commandName = null, mode = 'basic') {
     printGroup('Cart & Orders', ['cart', 'add', 'checkout', 'orders'], '📦', chalk.yellow);
     printGroup('AI Services', ['ai', 'credits', 'topup'], '🤖', chalk.cyan);
     printGroup('Stores', ['sellers', 'store', 'reviews'], '🏪', chalk.magenta);
-    printGroup('Automation', ['alias', 'reward'], '⚙️', chalk.white);
+    printGroup('Automation', ['alias', 'reward', 'subscribe', 'wishlist'], '⚙️', chalk.white);
     
     console.log(chalk.dim('─'.repeat(45)));
     console.log(chalk.dim('  tm help') + chalk.dim('            basic commands'));
