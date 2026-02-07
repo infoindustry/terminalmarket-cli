@@ -27,6 +27,35 @@ const __dirname = dirname(__filename);
 const pkg = JSON.parse(readFileSync(join(__dirname, "../package.json"), "utf-8"));
 const VERSION = pkg.version;
 
+function getPublicBaseUrl() {
+  const apiBase = getApiBase();
+  if (!apiBase) {
+    return "https://terminalmarket.app";
+  }
+  try {
+    const parsed = new URL(apiBase);
+    const host = parsed.host;
+    if (host.includes("localhost") || host.startsWith("127.0.0.1")) {
+      return "https://terminalmarket.app";
+    }
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return "https://terminalmarket.app";
+  }
+}
+
+function resolveProductUrl(p) {
+  return p?.buyUrl || p?.externalUrl || `${getPublicBaseUrl()}/product/${p.slug || p.id}`;
+}
+
+function shouldOpenExternal() {
+  return process.env.TM_NO_OPEN !== "1";
+}
+
+function shouldPrompt() {
+  return process.env.TM_NO_PROMPT !== "1";
+}
+
 // Helper for hidden password input
 function askPassword(prompt = "Password: ") {
   return new Promise((resolve) => {
@@ -193,8 +222,13 @@ program
       console.log(chalk.green("Opening GitHub authentication..."));
       console.log(chalk.dim(authUrl));
       try {
-        await open(authUrl);
-        console.log(chalk.dim("Complete login in browser, then run 'tm whoami' to verify."));
+        if (shouldOpenExternal()) {
+          await open(authUrl);
+          console.log(chalk.dim("Complete login in browser, then run 'tm whoami' to verify."));
+        } else {
+          console.log(chalk.yellow("Browser opening disabled. Visit manually:"));
+          console.log(authUrl);
+        }
       } catch {
         console.log(chalk.yellow("Could not open browser. Visit manually:"));
         console.log(authUrl);
@@ -212,11 +246,46 @@ program
     const authUrl = `${apiBase}/auth/github`;
     console.log(chalk.green("Opening GitHub authentication..."));
     try {
-      await open(authUrl);
-      console.log(chalk.dim("Complete login in browser, then run 'tm whoami' to verify."));
+      if (shouldOpenExternal()) {
+        await open(authUrl);
+        console.log(chalk.dim("Complete login in browser, then run 'tm whoami' to verify."));
+      } else {
+        console.log(chalk.yellow("Browser opening disabled. Visit:"));
+        console.log(authUrl);
+      }
     } catch {
       console.log(chalk.yellow("Could not open browser. Visit:"));
       console.log(authUrl);
+    }
+  });
+
+// Invite a colleague
+program
+  .command("invite")
+  .description("Invite a colleague by email")
+  .option("-e, --email <email>", "Email address to invite")
+  .option("-l, --link", "Get your invite link")
+  .action(async (opts) => {
+    try {
+      if (opts.link) {
+        const result = await apiGet("/invite/link");
+        console.log(result?.link || "Invite link unavailable");
+        return;
+      }
+
+      const email = opts.email;
+      if (!email) {
+        console.log(chalk.yellow("Usage: tm invite --email colleague@company.com"));
+        console.log(chalk.dim("Or share your link: tm invite --link"));
+        return;
+      }
+
+      await apiPost("/invite", { email });
+      console.log(chalk.green("✓ Invite sent!"));
+      console.log("Share your link: tm invite --link");
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+      process.exitCode = 1;
     }
   });
 
@@ -644,8 +713,10 @@ ai
       }
       
       console.log("");
-      console.log(`${chalk.dim("credits used:")} $${result.creditsUsed.toFixed(4)}`);
-      console.log(`${chalk.dim("new balance:")} $${result.newBalance}`);
+      const creditsUsed = Number(result.creditsUsed ?? 0);
+      const newBalance = result.newBalance ?? "0.0000";
+      console.log(`${chalk.dim("credits used:")} $${creditsUsed.toFixed(4)}`);
+      console.log(`${chalk.dim("new balance:")} $${newBalance}`);
     } catch (e) {
       if (e?.message?.includes("402") || e?.message?.includes("Insufficient")) {
         console.error(chalk.red("Insufficient credits. Use 'tm ai topup <amount>' to add credits."));
@@ -705,10 +776,12 @@ ai
       console.log(chalk.dim("Credits will be added after payment."));
       
       // Try to open in browser
-      try {
-        await open(result.url);
-        console.log(chalk.dim("(Opening in browser...)"));
-      } catch {}
+      if (shouldOpenExternal()) {
+        try {
+          await open(result.url);
+          console.log(chalk.dim("(Opening in browser...)"));
+        } catch {}
+      }
     } catch (e) {
       if (e?.message?.includes("401") || e?.message?.includes("Login")) {
         console.log(chalk.yellow("Please login first: tm login <email> <password>"));
@@ -786,7 +859,9 @@ program
     try {
       const result = await apiPost("/credits/topup", { amount: amountNum });
       console.log(chalk.green("Payment link: ") + chalk.cyan(result.url));
-      try { await open(result.url); } catch {}
+      if (shouldOpenExternal()) {
+        try { await open(result.url); } catch {}
+      }
     } catch (e) {
       console.error(chalk.red(e?.message || String(e)));
     }
@@ -1446,6 +1521,219 @@ program
   });
 
 // -----------------
+// merchant (seller tools)
+// -----------------
+const merchant = program
+  .command("merchant")
+  .description("Seller tools for digital products, keys, and webhooks");
+
+merchant
+  .command("init")
+  .description("Initialize a free merchant store")
+  .option("--name <name>", "Store name")
+  .option("--description <desc>", "Store description")
+  .action(async (opts) => {
+    try {
+      const payload = {};
+      if (opts.name) payload.storeName = opts.name;
+      if (opts.description) payload.description = opts.description;
+      await apiPost("/merchant/init", payload);
+      console.log(chalk.green("✓ Merchant store ready"));
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+      process.exitCode = 1;
+    }
+  });
+
+const merchantProduct = merchant
+  .command("product")
+  .description("Manage products");
+
+merchantProduct
+  .command("create")
+  .description("Create a digital product")
+  .requiredOption("--name <name>", "Product name")
+  .requiredOption("--price <price>", "Price")
+  .requiredOption("--category <category>", "Category slug")
+  .requiredOption("--description <desc>", "Description")
+  .option("--delivery <type>", "Delivery type: key | url | manual")
+  .option("--access-url <url>", "Access URL (for url delivery)")
+  .option("--checkout-url <url>", "External checkout URL (optional)")
+  .action(async (opts) => {
+    try {
+      const payload = {
+        name: opts.name,
+        price: Number(opts.price),
+        category: opts.category,
+        description: opts.description,
+        productKind: "digital",
+        digitalDeliveryType: opts.delivery || undefined,
+        accessUrl: opts.accessUrl || undefined,
+        checkoutUrl: opts.checkoutUrl || undefined,
+      };
+      const result = await apiPost("/store/products", payload);
+      console.log(chalk.green(`✓ Product created (#${result.id || "?"})`));
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+      process.exitCode = 1;
+    }
+  });
+
+merchant
+  .command("book")
+  .description("Digital book shortcuts")
+  .command("create")
+  .description("Create a digital book (URL delivery)")
+  .requiredOption("--name <name>", "Book name")
+  .requiredOption("--price <price>", "Price")
+  .requiredOption("--category <category>", "Category slug")
+  .requiredOption("--description <desc>", "Description")
+  .requiredOption("--url <url>", "Download/access URL")
+  .action(async (opts) => {
+    try {
+      const payload = {
+        name: opts.name,
+        price: Number(opts.price),
+        category: opts.category,
+        description: opts.description,
+        productKind: "digital",
+        digitalDeliveryType: "url",
+        accessUrl: opts.url,
+      };
+      const result = await apiPost("/store/products", payload);
+      console.log(chalk.green(`✓ Book created (#${result.id || "?"})`));
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+      process.exitCode = 1;
+    }
+  });
+
+merchant
+  .command("subscription")
+  .description("SaaS subscription shortcuts")
+  .command("create")
+  .description("Create a SaaS subscription product")
+  .requiredOption("--name <name>", "Product name")
+  .requiredOption("--price <price>", "Price")
+  .requiredOption("--category <category>", "Category slug")
+  .requiredOption("--description <desc>", "Description")
+  .requiredOption("--interval <interval>", "weekly | monthly | yearly")
+  .option("--access-url <url>", "Access URL")
+  .option("--checkout-url <url>", "External checkout URL (optional)")
+  .action(async (opts) => {
+    try {
+      const payload = {
+        name: opts.name,
+        price: Number(opts.price),
+        category: opts.category,
+        description: opts.description,
+        productKind: "saas",
+        subscriptionAvailable: true,
+        offerType: "subscription",
+        billingInterval: opts.interval,
+        digitalDeliveryType: "url",
+        accessUrl: opts.accessUrl || undefined,
+        checkoutUrl: opts.checkoutUrl || undefined,
+      };
+      const result = await apiPost("/store/products", payload);
+      console.log(chalk.green(`✓ Subscription created (#${result.id || "?"})`));
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+      process.exitCode = 1;
+    }
+  });
+
+merchant
+  .command("keys")
+  .description("License key management")
+  .command("upload")
+  .description("Upload license keys for a product")
+  .requiredOption("--product <id>", "Product ID")
+  .option("--keys <keys>", "Comma or newline separated keys")
+  .option("--file <path>", "Path to text file with keys")
+  .action(async (opts) => {
+    try {
+      let keys = opts.keys;
+      if (!keys && opts.file) {
+        keys = readFileSync(opts.file, "utf-8");
+      }
+      if (!keys) {
+        console.error(chalk.red("Provide --keys or --file"));
+        process.exitCode = 1;
+        return;
+      }
+      const result = await apiPost(`/merchant/products/${opts.product}/keys`, { keys });
+      console.log(chalk.green(`✓ Keys added (${result.added || 0})`));
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+      process.exitCode = 1;
+    }
+  });
+
+const merchantWebhook = merchant
+  .command("webhook")
+  .description("Manage seller webhooks");
+
+merchantWebhook
+  .command("add")
+  .description("Create a webhook")
+  .requiredOption("--name <name>", "Webhook name")
+  .requiredOption("--url <url>", "Webhook URL")
+  .requiredOption("--events <events>", "Comma-separated events")
+  .action(async (opts) => {
+    try {
+      const events = String(opts.events)
+        .split(",")
+        .map((e) => e.trim())
+        .filter(Boolean);
+      const result = await apiPost("/user/webhooks", {
+        name: opts.name,
+        url: opts.url,
+        events,
+      });
+      console.log(chalk.green("✓ Webhook created!"));
+      if (result?.id) {
+        console.log(`ID: ${result.id}`);
+      }
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+      process.exitCode = 1;
+    }
+  });
+
+merchantWebhook
+  .command("list")
+  .description("List your webhooks")
+  .action(async () => {
+    try {
+      const hooks = await apiGet("/user/webhooks");
+      if (!hooks || hooks.length === 0) {
+        console.log(chalk.yellow("No webhooks configured."));
+        return;
+      }
+      hooks.forEach((w) => {
+        console.log(`✓ #${w.id} ${w.name} - ${w.events?.length || 0} events`);
+      });
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+      process.exitCode = 1;
+    }
+  });
+
+merchantWebhook
+  .command("test <id>")
+  .description("Send a test event to webhook")
+  .action(async (id) => {
+    try {
+      await apiPost(`/user/webhooks/${id}/test`);
+      console.log(chalk.green("✓ Test webhook sent"));
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+      process.exitCode = 1;
+    }
+  });
+
+// -----------------
 // categories
 // -----------------
 program
@@ -1675,10 +1963,15 @@ program
         const imageUrl = p.imageUrl || p.image;
         if (imageUrl) {
           console.log(chalk.green("Opening image..."));
-          try {
-            await open(imageUrl);
-          } catch {
-            console.log(chalk.yellow("Could not open browser. Image URL:"));
+          if (shouldOpenExternal()) {
+            try {
+              await open(imageUrl);
+            } catch {
+              console.log(chalk.yellow("Could not open browser. Image URL:"));
+              console.log(imageUrl);
+            }
+          } else {
+            console.log(chalk.yellow("Browser opening disabled. Image URL:"));
             console.log(imageUrl);
           }
         } else {
@@ -1737,14 +2030,19 @@ program
         }
       } else {
         // Open product page or buyUrl
-        url = p.buyUrl || `${getApiBase().replace('/api', '')}/product/${p.slug || p.id}`;
+        url = resolveProductUrl(p);
       }
       
       console.log(chalk.green("Opening:"), url);
-      try {
-        await open(url);
-      } catch {
-        console.log(chalk.yellow("Could not open browser. URL:"));
+      if (shouldOpenExternal()) {
+        try {
+          await open(url);
+        } catch {
+          console.log(chalk.yellow("Could not open browser. URL:"));
+          console.log(url);
+        }
+      } else {
+        console.log(chalk.yellow("Browser opening disabled. URL:"));
         console.log(url);
       }
     } catch (e) {
@@ -1772,7 +2070,7 @@ program
         return;
       }
 
-      let buyUrl = p.buyUrl;
+      let buyUrl = resolveProductUrl(p);
       let offerId = opts.offer ? Number(opts.offer) : null;
       
       if (offerId) {
@@ -1828,7 +2126,7 @@ program
       console.log(chalk.yellow("  ℹ Early access — real checkout, real purchase"));
       console.log();
       
-      if (opts.open !== false) {
+      if (opts.open !== false && shouldOpenExternal()) {
         await open(buyUrl);
       }
     } catch (e) {
@@ -1905,7 +2203,9 @@ program
       console.log(chalk.dim(`  ${redirectUrl}`));
       console.log();
       
-      await open(redirectUrl);
+      if (shouldOpenExternal()) {
+        await open(redirectUrl);
+      }
     } catch (e) {
       console.error(chalk.red(e?.message || String(e)));
       process.exitCode = 1;
@@ -2401,41 +2701,42 @@ program
   .alias("tour")
   .description("Interactive onboarding tour")
   .action(async () => {
-    const inquirer = await import("inquirer").then(m => m.default);
-    
     console.log();
     console.log(chalk.green.bold("  Welcome to TerminalMarket! 🚀"));
     console.log(chalk.dim("  Let's get you started with a quick tour."));
     console.log();
-    
-    const { city } = await inquirer.prompt([
-      {
-        type: "input",
-        name: "city",
-        message: "What city are you in?",
-        default: "Berlin"
-      }
-    ]);
+    let city = "Berlin";
+    let action = "all";
+    if (shouldPrompt()) {
+      const inquirer = await import("inquirer").then(m => m.default);
+      const cityAnswer = await inquirer.prompt([
+        {
+          type: "input",
+          name: "city",
+          message: "What city are you in?",
+          default: "Berlin"
+        }
+      ]);
+      city = cityAnswer.city || city;
+      const actionAnswer = await inquirer.prompt([
+        {
+          type: "list",
+          name: "action",
+          message: "What would you like to explore?",
+          choices: [
+            { name: "🍽  Food & Drinks", value: "food" },
+            { name: "🤖  AI Services", value: "ai" },
+            { name: "🏢  Coworking Spaces", value: "coworking" },
+            { name: "🛠  Developer Tools", value: "digital" },
+            { name: "📦  Browse all products", value: "all" }
+          ]
+        }
+      ]);
+      action = actionAnswer.action || action;
+    }
     
     setLocation(city);
     console.log(chalk.green(`  ✓ Location set to ${city}`));
-    console.log();
-    
-    const { action } = await inquirer.prompt([
-      {
-        type: "list",
-        name: "action",
-        message: "What would you like to explore?",
-        choices: [
-          { name: "🍽  Food & Drinks", value: "food" },
-          { name: "🤖  AI Services", value: "ai" },
-          { name: "🏢  Coworking Spaces", value: "coworking" },
-          { name: "🛠  Developer Tools", value: "digital" },
-          { name: "📦  Browse all products", value: "all" }
-        ]
-      }
-    ]);
-    
     console.log();
     
     const spinner = createSpinner("Fetching products...");

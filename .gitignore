@@ -1,0 +1,48 @@
+# ===== Node.js =====
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# ===== Build outputs =====
+dist/
+build/
+coverage/
+.tmp/
+.cache/
+
+# ===== pkg / binaries =====
+*.exe
+*.dll
+*.so
+*.dylib
+
+# ===== Logs =====
+logs/
+*.log
+
+# ===== Environment variables =====
+.env
+.env.local
+.env.*.local
+
+# ===== OS files =====
+.DS_Store
+Thumbs.db
+
+# ===== Editor / IDE =====
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ===== Optional: if you ever use macOS signing =====
+*.dSYM/
+
+# ===== Temporary files =====
+*.tmp
+*.temp
