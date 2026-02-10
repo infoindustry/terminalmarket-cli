@@ -700,23 +700,81 @@ ai
         return;
       }
       
-      const result = await apiPost(`/ai/run/${model}`, { input: inputText });
-      
-      console.log(chalk.bold("AI Result"));
-      console.log("");
-      
-      if (result.output?.message) {
-        console.log(result.output.message);
-      }
-      if (result.output?.note) {
-        console.log(chalk.dim(result.output.note));
+      // Check if agent supports chat (has workflowId) — use Responses API for better results
+      let hasChatKit = false;
+      try {
+        const agentInfo = await apiGet(`/ai/agents/${model}`);
+        hasChatKit = !!agentInfo?.hasChatKit;
+      } catch {
+        // Not found or no info — proceed with regular run
       }
       
-      console.log("");
-      const creditsUsed = Number(result.creditsUsed ?? 0);
-      const newBalance = result.newBalance ?? "0.0000";
-      console.log(`${chalk.dim("credits used:")} $${creditsUsed.toFixed(4)}`);
-      console.log(`${chalk.dim("new balance:")} $${newBalance}`);
+      let result;
+      if (hasChatKit) {
+        // Use chat endpoint (Responses API) for workflow agents
+        result = await apiPost(`/ai/chat/${model}`, { message: inputText });
+        
+        console.log(chalk.bold.cyan(`🧠 ${result.model || model}`));
+        console.log("");
+        
+        if (result.text) {
+          try {
+            const parsed = JSON.parse(result.text);
+            printStructured(parsed, 0);
+          } catch {
+            console.log(chalk.white(result.text));
+          }
+        }
+        
+        console.log("");
+        const creditsUsed = Number(result.creditsUsed ?? 0);
+        const newBalance = result.newBalance ?? "0.0000";
+        console.log(`${chalk.dim("credits used:")} $${creditsUsed.toFixed(4)}`);
+        console.log(`${chalk.dim("new balance:")} $${newBalance}`);
+      } else {
+        // Regular model — use run endpoint
+        result = await apiPost(`/ai/run/${model}`, { input: inputText });
+        
+        console.log(chalk.bold("AI Result"));
+        console.log("");
+        
+        // Handle structured agent output
+        const agentOutput = result.output;
+        if (agentOutput?.resultText || agentOutput?.result) {
+          const content = agentOutput.result;
+          if (typeof content === 'string') {
+            try {
+              const parsed = JSON.parse(content);
+              printStructured(parsed, 0);
+            } catch {
+              console.log(chalk.white(content));
+            }
+          } else if (content && typeof content === 'object') {
+            printStructured(content, 0);
+          } else if (agentOutput.resultText) {
+            try {
+              const parsed = JSON.parse(agentOutput.resultText);
+              printStructured(parsed, 0);
+            } catch {
+              console.log(chalk.white(agentOutput.resultText));
+            }
+          }
+          if (agentOutput.runTimeMs) {
+            console.log(chalk.dim(`⚡ ${(agentOutput.runTimeMs / 1000).toFixed(1)}s`));
+          }
+        } else if (agentOutput?.message) {
+          console.log(agentOutput.message);
+        }
+        if (agentOutput?.note) {
+          console.log(chalk.dim(agentOutput.note));
+        }
+        
+        console.log("");
+        const creditsUsed = Number(result.creditsUsed ?? 0);
+        const newBalance = result.newBalance ?? "0.0000";
+        console.log(`${chalk.dim("credits used:")} $${creditsUsed.toFixed(4)}`);
+        console.log(`${chalk.dim("new balance:")} $${newBalance}`);
+      }
     } catch (e) {
       if (e?.message?.includes("402") || e?.message?.includes("Insufficient")) {
         console.error(chalk.red("Insufficient credits. Use 'tm ai topup <amount>' to add credits."));
@@ -726,6 +784,140 @@ ai
       process.exitCode = 1;
     }
   });
+
+ai
+  .command("chat <agent> [message...]")
+  .description("Interactive chat with an AI agent")
+  .action(async (agent, message) => {
+    try {
+      // Check if agent exists and supports chat
+      let agentInfo;
+      try {
+        agentInfo = await apiGet(`/ai/agents/${agent}`);
+      } catch {
+        console.error(chalk.red(`Agent "${agent}" not found. Use 'tm ai list' to see available agents.`));
+        process.exitCode = 1;
+        return;
+      }
+
+      console.log(chalk.bold.cyan(`🧠 ${agentInfo.name}`));
+      if (agentInfo.description) console.log(chalk.dim(agentInfo.description));
+      console.log(chalk.dim(`Price per message: $${parseFloat(agentInfo.pricePerRun).toFixed(4)}`));
+      console.log(chalk.dim('Type "exit" or "quit" to end chat.\n'));
+
+      // If initial message provided, send it first
+      const initialMessage = message?.join(" ");
+
+      // Use Responses API for conversation (previous_response_id chain)
+      let previousResponseId = null;
+
+      const sendMessage = async (text) => {
+        try {
+          const result = await apiPost(`/ai/chat/${agent}`, { 
+            message: text,
+            ...(previousResponseId ? { previousResponseId } : {})
+          });
+
+          // Store response ID for conversation continuity
+          if (result.responseId) {
+            previousResponseId = result.responseId;
+          }
+
+          // Print the result
+          if (result.text) {
+            // Try to parse as structured JSON
+            try {
+              const parsed = JSON.parse(result.text);
+              printStructured(parsed, 0);
+            } catch {
+              // Plain text — print as markdown-like
+              console.log(chalk.white(result.text));
+            }
+          } else {
+            console.log(chalk.dim("(no response)"));
+          }
+
+          const creditsUsed = Number(result.creditsUsed ?? 0);
+          console.log(chalk.dim(`\n  [$${creditsUsed.toFixed(4)} credits | balance: $${result.newBalance}]`));
+          console.log();
+        } catch (e) {
+          if (e?.message?.includes("402") || e?.message?.includes("Insufficient")) {
+            console.error(chalk.red("Insufficient credits. Use 'tm ai topup <amount>' to add."));
+          } else {
+            console.error(chalk.red(e?.message || "Failed to get response"));
+          }
+        }
+      };
+
+      // Send initial message if provided
+      if (initialMessage) {
+        console.log(chalk.green(`you: ${initialMessage}`));
+        await sendMessage(initialMessage);
+      }
+
+      // Interactive loop
+      const readline = await import('readline');
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+
+      const prompt = () => {
+        rl.question(chalk.green('you: '), async (line) => {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed === 'exit' || trimmed === 'quit' || trimmed === '/exit') {
+            console.log(chalk.dim('Chat ended.'));
+            rl.close();
+            return;
+          }
+          await sendMessage(trimmed);
+          prompt();
+        });
+      };
+
+      prompt();
+    } catch (e) {
+      console.error(chalk.red(e?.message || String(e)));
+      process.exitCode = 1;
+    }
+  });
+
+// Helper: pretty-print structured JSON in terminal
+function printStructured(obj, depth) {
+  if (!obj || typeof obj !== 'object') {
+    console.log(chalk.white(String(obj)));
+    return;
+  }
+  const indent = '  '.repeat(depth);
+  for (const [key, value] of Object.entries(obj)) {
+    const label = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    if (Array.isArray(value)) {
+      console.log(`${indent}${chalk.cyan(label)}:`);
+      for (const item of value) {
+        if (typeof item === 'object' && item !== null) {
+          console.log(`${indent}  ${chalk.dim('─')}`);
+          printStructured(item, depth + 2);
+        } else {
+          console.log(`${indent}  ${chalk.dim('•')} ${chalk.white(String(item))}`);
+        }
+      }
+    } else if (typeof value === 'object' && value !== null) {
+      // Inline small objects (price, location)
+      const keys = Object.keys(value);
+      if (keys.length <= 3 && keys.every(k => typeof value[k] !== 'object')) {
+        const parts = Object.entries(value).map(([k, v]) => `${v}`).join(' ');
+        console.log(`${indent}${chalk.cyan(label)}: ${chalk.white(parts)}`);
+      } else {
+        console.log(`${indent}${chalk.cyan(label)}:`);
+        printStructured(value, depth + 1);
+      }
+    } else if (typeof value === 'boolean') {
+      console.log(`${indent}${chalk.cyan(label)}: ${value ? chalk.green('✓ Yes') : chalk.red('✗ No')}`);
+    } else {
+      console.log(`${indent}${chalk.cyan(label)}: ${chalk.white(String(value))}`);
+    }
+  }
+}
 
 ai
   .command("credits")
@@ -1711,9 +1903,18 @@ merchantWebhook
         console.log(chalk.yellow("No webhooks configured."));
         return;
       }
-      hooks.forEach((w) => {
-        console.log(`✓ #${w.id} ${w.name} - ${w.events?.length || 0} events`);
+      console.log(chalk.cyan(`🔗 Webhooks (${hooks.length})`));
+      console.log();
+      hooks.forEach((w, i) => {
+        if (i > 0) console.log(chalk.dim("  ─────────────────────────────"));
+        const status = w.active === false ? chalk.red("[disabled]") : chalk.green("[active]");
+        console.log(`  ${chalk.cyan("#" + w.id)} ${chalk.bold(w.name || "Unnamed")} ${status}`);
+        console.log(chalk.dim(`  URL: ${w.url}`));
+        const events = Array.isArray(w.events) ? w.events.join(", ") : w.events;
+        console.log(chalk.dim(`  Events: ${events}`));
       });
+      console.log();
+      console.log(chalk.dim("  Test: tm merchant webhook test <id>"));
     } catch (e) {
       console.error(chalk.red(e?.message || String(e)));
       process.exitCode = 1;
