@@ -480,7 +480,8 @@ cart
   .action(async (productId, opts) => {
     try {
       const quantity = parseInt(opts.quantity) || 1;
-      await apiPost("/cart/add", { productId: parseInt(productId), quantity });
+      const pid = /^\d+$/.test(productId) ? parseInt(productId) : productId;
+      await apiPost("/cart/add", { productId: pid, quantity });
       printSuccess(`Added to cart (qty: ${quantity})`);
     } catch (e) {
       printError(e?.message || String(e));
@@ -493,7 +494,8 @@ cart
   .description("Remove product from cart")
   .action(async (productId) => {
     try {
-      await apiPost("/cart/remove", { productId: parseInt(productId) });
+      const pid = /^\d+$/.test(productId) ? parseInt(productId) : productId;
+      await apiPost("/cart/remove", { productId: pid });
       printSuccess("Removed from cart");
     } catch (e) {
       printError(e?.message || String(e));
@@ -522,7 +524,8 @@ program
   .action(async (productId, opts) => {
     try {
       const quantity = parseInt(opts.quantity) || 1;
-      await apiPost("/cart/add", { productId: parseInt(productId), quantity });
+      const pid = /^\d+$/.test(productId) ? parseInt(productId) : productId;
+      await apiPost("/cart/add", { productId: pid, quantity });
       console.log(chalk.green(`Added to cart (qty: ${quantity})`));
     } catch (e) {
       console.error(chalk.red(e?.message || String(e)));
@@ -1189,7 +1192,7 @@ reward
   .action(async (productId, pushCount) => {
     try {
       await apiPost("/rewards", {
-        productId: parseInt(productId),
+        productId: /^\d+$/.test(productId) ? parseInt(productId) : productId,
         pushCount: parseInt(pushCount)
       });
       console.log(chalk.green(`Reward rule created! Product #${productId} every ${pushCount} pushes.`));
@@ -1306,7 +1309,7 @@ subscribe
       }
       
       const payload = {
-        productId: parseInt(productId),
+        productId: /^\d+$/.test(productId) ? parseInt(productId) : productId,
         frequency,
         timeOfDay: options.time,
         name: options.name,
@@ -1458,7 +1461,7 @@ wishlist
   .action(async (productId, options) => {
     try {
       const item = await apiPost("/wishlist", {
-        productId: parseInt(productId),
+        productId: /^\d+$/.test(productId) ? parseInt(productId) : productId,
         note: options.note,
       });
       console.log(chalk.green(`✓ Added to wishlist: ${item.product?.name || productId}`));
