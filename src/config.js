@@ -45,6 +45,19 @@ export function markFirstRunComplete() {
   conf.set("firstRunComplete", true);
 }
 
+export function getCsrfToken() {
+  return conf.get("csrfToken", null);
+}
+
+export function setCsrfToken(value) {
+  conf.set("csrfToken", value);
+  return value;
+}
+
+export function clearCsrfToken() {
+  conf.delete("csrfToken");
+}
+
 export function getLocation() {
   return conf.get("location", null);
 }

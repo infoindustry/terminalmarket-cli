@@ -8,8 +8,8 @@ import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
-import { apiGet, apiPost, apiDelete, apiPatch } from "../src/api.js";
-import { getApiBase, setApiBase, getUser, setUser, clearUser, clearSession, isFirstRun, markFirstRunComplete, setLocation, getLocation } from "../src/config.js";
+import { apiGet, apiPost, apiDelete, apiPatch, fetchCsrfToken } from "../src/api.js";
+import { getApiBase, setApiBase, getUser, setUser, clearUser, clearSession, clearCsrfToken, isFirstRun, markFirstRunComplete, setLocation, getLocation } from "../src/config.js";
 import { 
   printTable, pickProductFields, pickSellerFields, pickOfferFields, containsQuery, formatStars,
   printHeader, printDivider, printSuccess, printError, printWarning, printInfo, printField, printEmpty,
@@ -165,6 +165,7 @@ program
         setUser(result.user);
         console.log(chalk.green(`Welcome, ${result.user.name || result.user.email}!`));
         console.log(chalk.dim("You are now logged in."));
+        await fetchCsrfToken();
       } else {
         console.log(chalk.green("Registration successful! Please login."));
       }
@@ -188,6 +189,7 @@ program
       } else {
         console.log(chalk.green("Login successful!"));
       }
+      await fetchCsrfToken();
     } catch (e) {
       console.error(chalk.red(e?.message || String(e)));
       process.exitCode = 1;
@@ -202,10 +204,12 @@ program
       await apiPost("/auth/logout", {});
       clearUser();
       clearSession();
+      clearCsrfToken();
       console.log(chalk.green("Logged out successfully."));
     } catch (e) {
       clearUser();
       clearSession();
+      clearCsrfToken();
       console.log(chalk.green("Logged out."));
     }
   });
@@ -2068,7 +2072,7 @@ program
     }
   });
 
-// Search with server-side filtering
+// Search with server-side filtering + client-side sort/head/count (pipe replacement)
 program
   .command("search <query>")
   .description("Search products")
@@ -2078,13 +2082,16 @@ program
   .option("--country <country>", "Filter by country code")
   .option("--price-min <min>", "Minimum price")
   .option("--price-max <max>", "Maximum price")
+  .option("--sort <field>", "Sort by field: price, name, category (prefix with - for desc, e.g. -price)")
+  .option("--head <n>", "Show only first N results")
+  .option("--count", "Show only result count")
   .action(async (query, opts) => {
     try {
       const limit = Math.max(1, Math.min(200, Number.parseInt(opts.limit, 10) || 20));
       
       const params = new URLSearchParams();
       params.set("q", query);
-      params.set("limit", String(limit));
+      params.set("limit", String(opts.sort || opts.head || opts.count ? 200 : limit));
       if (opts.category) params.set("category", opts.category);
       if (opts.city) params.set("city", opts.city);
       if (opts.country) params.set("country", opts.country);
@@ -2092,8 +2099,34 @@ program
       if (opts.priceMax) params.set("price_max", opts.priceMax);
       
       const result = await apiGet(`/products/search?${params.toString()}`);
-      const products = result.products || result || [];
-      const rows = products.map(pickProductFields);
+      let products = result.products || result || [];
+      
+      // Client-side sort (pipe replacement)
+      if (opts.sort) {
+        const desc = opts.sort.startsWith("-");
+        const field = desc ? opts.sort.slice(1) : opts.sort;
+        products = [...products].sort((a, b) => {
+          let va = a[field], vb = b[field];
+          if (field === "price") { va = parseFloat(va) || 0; vb = parseFloat(vb) || 0; }
+          if (typeof va === "string") { va = va.toLowerCase(); vb = (vb || "").toLowerCase(); }
+          if (va < vb) return desc ? 1 : -1;
+          if (va > vb) return desc ? -1 : 1;
+          return 0;
+        });
+      }
+      
+      // Client-side head
+      if (opts.head) {
+        products = products.slice(0, parseInt(opts.head, 10) || 5);
+      }
+      
+      // Count mode
+      if (opts.count) {
+        console.log(chalk.green.bold(products.length) + chalk.dim(" result(s)"));
+        return;
+      }
+      
+      const rows = products.slice(0, limit).map(pickProductFields);
       
       printTable(rows, [
         { key: "id", title: "id" },
@@ -2105,7 +2138,7 @@ program
         { key: "serviceCity", title: "city" },
       ]);
       
-      if (products.length >= limit) {
+      if (products.length >= limit && !opts.head) {
         console.log(chalk.dim(`Showing ${limit} results. Use --limit to show more.`));
       }
     } catch (e) {
@@ -2673,6 +2706,8 @@ const commandGroups = {
   'Authentication': ['login', 'logout', 'register', 'auth', 'whoami', 'profile'],
   'Shopping': ['featured', 'deals', 'products', 'search', 'view', 'buy', 'book', 'open', 'categories'],
   'Cart & Orders': ['cart', 'add', 'checkout', 'orders'],
+  'Reverse Marketplace': ['request'],
+  'Automation': ['watch', 'telegram'],
   'Developer Jobs': ['jobs', 'job', 'apply', 'applications'],
   'Stores': ['sellers', 'store', 'reviews', 'where'],
   'AI Services': ['ai', 'credits', 'topup'],
@@ -2691,9 +2726,10 @@ const basicGroups = {
 
 const advancedGroups = {
   'Cart & Orders': ['cart', 'add', 'checkout', 'orders'],
+  'Reverse Marketplace': ['request'],
   'AI Services': ['ai', 'credits', 'topup'],
   'Stores': ['sellers', 'store', 'reviews'],
-  'Automation': ['alias', 'reward', 'subscribe', 'wishlist', 'webhook']
+  'Automation': ['watch', 'telegram', 'alias', 'reward', 'subscribe', 'wishlist', 'webhook']
 };
 
 // Custom help formatter
@@ -2816,9 +2852,10 @@ function showHelp(commandName = null, mode = 'basic') {
     console.log();
     
     printGroup('Cart & Orders', ['cart', 'add', 'checkout', 'orders'], '📦', chalk.yellow);
+    printGroup('Reverse Marketplace', ['request'], '📋', chalk.magenta);
     printGroup('AI Services', ['ai', 'credits', 'topup'], '🤖', chalk.cyan);
     printGroup('Stores', ['sellers', 'store', 'reviews'], '🏪', chalk.magenta);
-    printGroup('Automation', ['alias', 'reward', 'subscribe', 'wishlist'], '⚙️', chalk.white);
+    printGroup('Automation', ['watch', 'telegram', 'alias', 'reward', 'subscribe', 'wishlist'], '👁', chalk.cyan);
     
     console.log(chalk.dim('─'.repeat(45)));
     console.log(chalk.dim('  tm help') + chalk.dim('            basic commands'));
@@ -2834,6 +2871,8 @@ function showHelp(commandName = null, mode = 'basic') {
       'Authentication': chalk.blue,
       'Shopping': chalk.green,
       'Cart & Orders': chalk.yellow,
+      'Reverse Marketplace': chalk.magenta,
+      'Automation': chalk.cyan,
       'Developer Jobs': chalk.magenta,
       'Stores': chalk.cyan,
       'AI Services': chalk.cyan,
@@ -2847,6 +2886,8 @@ function showHelp(commandName = null, mode = 'basic') {
       'Authentication': '🔐',
       'Shopping': '🛒',
       'Cart & Orders': '📦',
+      'Reverse Marketplace': '📋',
+      'Automation': '👁',
       'Developer Jobs': '💼',
       'Stores': '🏪',
       'AI Services': '🤖',
@@ -3182,7 +3223,10 @@ library
       }
       
       console.log();
-      showNextSteps(["tm keys       — show your license keys", "tm download 1 — download file for purchase #1"]);
+      showNextSteps([
+        { cmd: "tm keys", desc: "show your license keys" },
+        { cmd: "tm download <id>", desc: "download file for purchase" }
+      ]);
     } catch (error) {
       showError(error.message || "Failed to fetch library");
     }
@@ -3352,7 +3396,9 @@ tasks
       }
       
       console.log();
-      showNextSteps(["tm task <task_id> — view task details and results"]);
+      showNextSteps([
+        { cmd: "tm task <task_id>", desc: "view task details and results" }
+      ]);
     } catch (error) {
       showError(error.message || "Failed to fetch tasks");
     }
@@ -3473,8 +3519,8 @@ program
       });
       
       showNextSteps([
-        "tm job <number>   — view vacancy details",
-        "tm apply <number> — apply for job"
+        { cmd: "tm job <number>", desc: "view vacancy details" },
+        { cmd: "tm apply <number>", desc: "apply for job" }
       ]);
     } catch (error) {
       showError(error.message || "Failed to fetch vacancies");
@@ -3610,6 +3656,399 @@ program
       }
     }
   });
+
+// ==================== WATCH — Persistent Pipe Automation ====================
+const watchCmd = program
+  .command("watch")
+  .description("Create and manage persistent watch rules (price alerts, etc.)");
+
+watchCmd
+  .command("create")
+  .description("Create a watch rule from a pipe query")
+  .allowUnknownOption(true)
+  .helpOption(false)
+  .action(async (opts, cmd) => {
+    try {
+      // Parse raw args: everything after "create" is the pipe query + watch flags
+      const rawArgs = cmd.args || [];
+      const WATCH_FLAGS = new Set(["--notify", "--interval", "--action", "--name"]);
+      const queryParts = [];
+      let notifyVia = "in_app", intervalMinutes = 60, action = "notify", name = null;
+      
+      for (let i = 0; i < rawArgs.length; i++) {
+        if (WATCH_FLAGS.has(rawArgs[i]) && rawArgs[i + 1]) {
+          const flag = rawArgs[i];
+          const val = rawArgs[++i];
+          if (flag === "--notify") notifyVia = val;
+          else if (flag === "--interval") intervalMinutes = parseInt(val, 10) || 60;
+          else if (flag === "--action") action = val;
+          else if (flag === "--name") name = val;
+        } else {
+          queryParts.push(rawArgs[i]);
+        }
+      }
+      
+      const pipeQuery = queryParts.join(" ");
+      if (!pipeQuery) {
+        showError("Please provide a pipe query. Example: tm watch create search coffee --sort price --notify telegram");
+        process.exitCode = 1;
+        return;
+      }
+      
+      const spinner = createSpinner("Creating watch rule...");
+      const result = await apiPost("/watch-rules", {
+        pipeQuery,
+        name,
+        notifyVia,
+        action,
+        intervalMinutes,
+      });
+      stopSpinner(spinner);
+      
+      showSuccess(`Watch rule #${result.id} created`);
+      console.log(`  ${chalk.dim("Query:")}   ${chalk.yellow(result.pipeQuery)}`);
+      console.log(`  ${chalk.dim("Every:")}   ${result.intervalMinutes} min`);
+      console.log(`  ${chalk.dim("Notify:")}  ${result.notifyVia}`);
+      console.log(`  ${chalk.dim("Action:")}  ${result.action}`);
+      if (result.name) console.log(`  ${chalk.dim("Name:")}    ${result.name}`);
+      console.log();
+      console.log(chalk.dim(`  Manage: tm watch list | tm watch pause ${result.id} | tm watch delete ${result.id}`));
+    } catch (e) {
+      showError(e?.message || "Failed to create watch rule");
+      process.exitCode = 1;
+    }
+  });
+
+watchCmd
+  .command("list")
+  .description("List your watch rules")
+  .action(async () => {
+    try {
+      const spinner = createSpinner("Fetching watch rules...");
+      const rules = await apiGet("/watch-rules");
+      stopSpinner(spinner);
+      
+      if (!Array.isArray(rules) || rules.length === 0) {
+        showInfoBox("No watch rules", "Create one: tm watch create search coffee --notify telegram");
+        return;
+      }
+      
+      showSection(`Watch Rules (${rules.length})`);
+      console.log();
+      
+      for (const r of rules) {
+        const status = r.status === "active" ? chalk.green("●") : chalk.dim("○");
+        const nameStr = r.name ? chalk.white(r.name) + " — " : "";
+        console.log(`  ${status} ${chalk.yellow(`#${r.id}`)} ${nameStr}${chalk.dim(r.pipeQuery)}`);
+        console.log(`    ${chalk.dim(`every ${r.intervalMinutes}m · ${r.notifyVia} · ${r.totalChecks || 0} checks · ${r.totalMatches || 0} matches`)}`);
+      }
+      console.log();
+    } catch (e) {
+      if (e.message?.includes("401")) {
+        showError("Login required. Run: tm login <email>");
+      } else {
+        showError(e?.message || "Failed to load watch rules");
+      }
+    }
+  });
+
+watchCmd
+  .command("pause <id>")
+  .description("Pause a watch rule")
+  .action(async (id) => {
+    try {
+      await apiPatch(`/watch-rules/${id}`, { status: "paused" });
+      showSuccess(`Watch rule #${id} paused`);
+    } catch (e) {
+      showError(e?.message || "Failed to pause rule");
+      process.exitCode = 1;
+    }
+  });
+
+watchCmd
+  .command("resume <id>")
+  .description("Resume a paused watch rule")
+  .action(async (id) => {
+    try {
+      await apiPatch(`/watch-rules/${id}`, { status: "active" });
+      showSuccess(`Watch rule #${id} resumed`);
+    } catch (e) {
+      showError(e?.message || "Failed to resume rule");
+      process.exitCode = 1;
+    }
+  });
+
+watchCmd
+  .command("delete <id>")
+  .alias("rm")
+  .description("Delete a watch rule")
+  .action(async (id) => {
+    try {
+      await apiDelete(`/watch-rules/${id}`);
+      showSuccess(`Watch rule #${id} deleted`);
+    } catch (e) {
+      showError(e?.message || "Failed to delete rule");
+      process.exitCode = 1;
+    }
+  });
+
+watchCmd
+  .command("logs <id>")
+  .alias("history")
+  .description("View execution history for a watch rule")
+  .action(async (id) => {
+    try {
+      const spinner = createSpinner("Fetching logs...");
+      const logs = await apiGet(`/watch-rules/${id}/logs`);
+      stopSpinner(spinner);
+      
+      if (!Array.isArray(logs) || logs.length === 0) {
+        showInfoBox("No logs yet", `Rule #${id} hasn't been checked yet.`);
+        return;
+      }
+      
+      showSection(`Logs for watch rule #${id}`);
+      console.log();
+      
+      for (const log of logs.slice(0, 20)) {
+        const icon = log.isNew ? chalk.yellow("!") : chalk.dim("·");
+        const date = new Date(log.createdAt).toLocaleString();
+        const count = `${log.resultCount} result(s)`;
+        const action = log.actionTaken ? ` · ${log.actionTaken}` : "";
+        const ms = log.executionMs ? ` · ${log.executionMs}ms` : "";
+        console.log(`  ${icon} ${chalk.dim(date)} — ${count}${action}${ms}`);
+      }
+      console.log();
+    } catch (e) {
+      showError(e?.message || "Failed to load logs");
+      process.exitCode = 1;
+    }
+  });
+
+// Shortcut: `tm watch` with no subcommand shows help
+watchCmd.action(() => {
+  watchCmd.outputHelp();
+});
+
+// ==================== TELEGRAM — Connect for Notifications ====================
+const telegramCmd = program
+  .command("telegram")
+  .alias("tg")
+  .description("Link/unlink Telegram for notifications");
+
+telegramCmd
+  .command("link <code>")
+  .description("Link your Telegram using code from @TerminalMarketBot")
+  .action(async (code) => {
+    try {
+      const spinner = createSpinner("Linking Telegram...");
+      await apiPost("/user/telegram/link", { code: code.toUpperCase() });
+      stopSpinner(spinner);
+      showSuccess("Telegram linked! You'll receive watch alerts and notifications there.");
+    } catch (e) {
+      showError(e?.message || "Failed to link Telegram");
+      process.exitCode = 1;
+    }
+  });
+
+telegramCmd
+  .command("unlink")
+  .alias("disconnect")
+  .description("Disconnect Telegram from your account")
+  .action(async () => {
+    try {
+      await apiPost("/user/telegram/unlink");
+      showSuccess("Telegram disconnected.");
+    } catch (e) {
+      showError(e?.message || "Failed to unlink Telegram");
+      process.exitCode = 1;
+    }
+  });
+
+telegramCmd
+  .command("status")
+  .description("Check if Telegram is linked")
+  .action(async () => {
+    try {
+      const data = await apiGet("/user/telegram/status");
+      if (data.linked) {
+        showSuccess("Telegram is connected. You'll receive notifications there.");
+        console.log(chalk.dim("  To disconnect: tm telegram unlink"));
+      } else {
+        console.log(chalk.dim("  Telegram is not connected."));
+        console.log(chalk.dim("  1. Open @TerminalMarketBot in Telegram"));
+        console.log(chalk.dim("  2. Send /start to get your code"));
+        console.log(chalk.dim("  3. Run: tm telegram link <CODE>"));
+      }
+    } catch (e) {
+      if (e.message?.includes("401")) {
+        showError("Login required. Run: tm login <email>");
+      } else {
+        showError(e?.message || "Failed to check status");
+      }
+    }
+  });
+
+telegramCmd.action(() => {
+  telegramCmd.outputHelp();
+});
+
+// ==================== REQUEST — Reverse Marketplace ====================
+const requestCmd = program
+  .command("request")
+  .alias("req")
+  .description("Reverse Marketplace: post what you need, sellers compete");
+
+requestCmd
+  .command("create <title...>")
+  .description("Create a buyer request")
+  .option("--category <category>", "Category slug")
+  .option("--budget <amount>", "Maximum budget")
+  .option("--deadline <time>", "Deadline (30m, 2h, 3d)", "2h")
+  .action(async (titleParts, opts) => {
+    try {
+      const title = titleParts.join(" ");
+      const body = { title };
+      if (opts.category) body.category = opts.category;
+      if (opts.budget) body.budgetMax = opts.budget;
+      if (opts.deadline) body.deadline = opts.deadline;
+      
+      const spinner = createSpinner("Creating request...");
+      const data = await apiPost("/requests", body);
+      stopSpinner(spinner);
+      
+      showSuccess("Request created!");
+      console.log(`  ${chalk.dim("ID:")}       #${data.id}`);
+      console.log(`  ${chalk.dim("Title:")}    ${data.title}`);
+      if (data.budgetMax) console.log(`  ${chalk.dim("Budget:")}   up to ${data.currency || 'USD'} ${data.budgetMax}`);
+      if (data.category) console.log(`  ${chalk.dim("Category:")} ${data.category}`);
+      if (data.expiresAt) {
+        const exp = new Date(data.expiresAt);
+        const diff = exp.getTime() - Date.now();
+        const hours = Math.floor(diff / 3600000);
+        const mins = Math.floor((diff % 3600000) / 60000);
+        console.log(`  ${chalk.dim("Expires:")}  ${hours > 0 ? hours + 'h ' : ''}${mins}m`);
+      }
+      console.log();
+      console.log(chalk.dim("  Matching sellers have been notified. View offers:"));
+      console.log(chalk.cyan(`  tm request view ${data.id}`));
+    } catch (e) {
+      showError(e?.message || "Failed to create request");
+      process.exitCode = 1;
+    }
+  });
+
+requestCmd
+  .command("list")
+  .description("List your buyer requests")
+  .action(async () => {
+    try {
+      const spinner = createSpinner("Fetching requests...");
+      const data = await apiGet("/requests/my");
+      stopSpinner(spinner);
+      
+      const requests = data.requests || [];
+      if (requests.length === 0) {
+        showInfoBox("No requests", "Create one: tm request create \"Need a laptop\" --budget 700 --category electronics");
+        return;
+      }
+      
+      showSection(`Your Requests (${requests.length})`);
+      console.log();
+      
+      const statusIcons = { active: chalk.green("●"), fulfilled: chalk.green("✓"), expired: chalk.dim("○"), cancelled: chalk.red("✗") };
+      
+      for (const r of requests) {
+        const icon = statusIcons[r.status] || chalk.dim("?");
+        const budget = r.budgetMax ? ` · up to ${r.currency || 'USD'} ${r.budgetMax}` : "";
+        const proposals = r.proposalCount > 0 ? chalk.green(` · ${r.proposalCount} offer(s)`) : "";
+        console.log(`  ${icon} ${chalk.yellow(`#${r.id}`)} ${r.title}${budget}${proposals} · ${r.status}`);
+      }
+      console.log();
+      console.log(chalk.dim("  View proposals: tm request view <id>"));
+    } catch (e) {
+      if (e.message?.includes("401")) {
+        showError("Login required. Run: tm login <email>");
+      } else {
+        showError(e?.message || "Failed to fetch requests");
+      }
+    }
+  });
+
+requestCmd
+  .command("view <id>")
+  .description("View a request and its proposals")
+  .action(async (id) => {
+    try {
+      const spinner = createSpinner("Fetching request...");
+      const data = await apiGet(`/requests/${id}`);
+      stopSpinner(spinner);
+      
+      const { request, proposals } = data;
+      
+      showSection(`Request #${request.id}: ${request.title}`);
+      console.log(`  ${chalk.dim("Status:")} ${request.status}`);
+      if (request.budgetMax) console.log(`  ${chalk.dim("Budget:")} up to ${request.currency || 'USD'} ${request.budgetMax}`);
+      
+      if (!proposals || proposals.length === 0) {
+        console.log();
+        console.log(chalk.dim("  No proposals yet. Sellers have been notified."));
+        return;
+      }
+      
+      console.log();
+      console.log(chalk.yellow.bold(`  Proposals (${proposals.length}):`));
+      console.log();
+      
+      for (const [i, p] of proposals.entries()) {
+        const statusTag = p.status === "accepted" ? chalk.green(" [ACCEPTED]") : 
+                          p.status === "rejected" ? chalk.dim(" [rejected]") :
+                          p.status === "withdrawn" ? chalk.dim(" [withdrawn]") : "";
+        console.log(`  ${chalk.dim(`${i + 1}.`)} ${chalk.white(p.sellerName || 'Seller')}: ${p.title} — ${chalk.green(`${p.currency || 'USD'} ${p.price}`)}${statusTag}`);
+        if (p.description) console.log(`     ${chalk.dim(p.description)}`);
+      }
+      
+      if (request.status === "active") {
+        console.log();
+        console.log(chalk.dim("  Accept: tm request accept <requestId> <proposalId>"));
+      }
+    } catch (e) {
+      showError(e?.message || "Failed to load request");
+      process.exitCode = 1;
+    }
+  });
+
+requestCmd
+  .command("accept <requestId> <proposalId>")
+  .description("Accept a proposal")
+  .action(async (requestId, proposalId) => {
+    try {
+      const spinner = createSpinner("Accepting proposal...");
+      await apiPost(`/requests/${requestId}/accept/${proposalId}`);
+      stopSpinner(spinner);
+      showSuccess(`Proposal #${proposalId} accepted! The seller has been notified.`);
+    } catch (e) {
+      showError(e?.message || "Failed to accept proposal");
+      process.exitCode = 1;
+    }
+  });
+
+requestCmd
+  .command("cancel <id>")
+  .description("Cancel a request")
+  .action(async (id) => {
+    try {
+      await apiPost(`/requests/${id}/cancel`);
+      showSuccess(`Request #${id} cancelled.`);
+    } catch (e) {
+      showError(e?.message || "Failed to cancel request");
+      process.exitCode = 1;
+    }
+  });
+
+requestCmd.action(() => {
+  requestCmd.outputHelp();
+});
 
 program
   .command("help [command]")
