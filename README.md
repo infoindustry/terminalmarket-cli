@@ -1,6 +1,22 @@
 # TerminalMarket CLI
 
-The official command-line interface for [TerminalMarket](https://terminalmarket.app) — a marketplace for developers.
+The official command-line interface for [TerminalMarket](https://terminalmarket.app) — a developer marketplace that lives in your terminal.
+
+Search, buy, and manage orders without leaving the command line. Unix pipes, price alerts, reverse marketplace — all from `tm`.
+
+## Demo
+
+### Search & Buy
+
+![Search and buy products](./docs/demo-search-buy.png)
+
+### Reverse Marketplace — stores compete for your order
+
+![Reverse marketplace](./docs/demo-reverse-marketplace.png)
+
+### Watch & Price Alerts via Telegram
+
+![Watch alerts](./docs/demo-watch-alerts.png)
 
 ## Installation
 
@@ -18,10 +34,15 @@ curl -fsSL https://terminalmarket.app/install.sh | sh
 
 This installs `tm` into `~/.local/bin`.
 
-## Usage
+## Quick Start
 
 ```bash
-tm <command> [options]
+tm register you@email.com          # Create account
+tm search coffee                   # Browse products
+tm search coffee | sort price      # Unix pipes work!
+tm add coffee-03                   # Add to cart
+tm cart                            # View cart
+tm checkout                        # Buy
 ```
 
 ## Commands
@@ -35,35 +56,57 @@ tm logout                          # Logout
 tm whoami                          # Show current user info
 tm me                              # Alias for whoami
 tm auth github                     # Login with GitHub (opens browser)
-tm github                          # Shortcut for GitHub auth
 ```
 
-### Profile
-
-```bash
-tm profile                         # View your profile
-tm profile view                    # View your profile
-tm profile set name "John Doe"     # Update your name
-tm profile set phone "+1234567890" # Update phone
-tm profile set address "123 Main"  # Update address
-tm profile set city "Berlin"       # Update city
-tm profile set country "DE"        # Update country
-```
-
-### Shopping
+### Shopping & Pipes
 
 ```bash
 tm products                        # List all products
 tm products --category coffee      # Filter by category
-tm products --store 1              # Filter by store
-tm search "coffee berlin"          # Search products
+tm search "coffee"                 # Search products
+tm search coffee | sort price      # Sort by price (pipes!)
+tm search coffee | head 3          # First 3 results
+tm search coffee | count           # Count results
+tm search nut | filter --max-price 10 | sort price  # Chain pipes
 tm view <product-id>               # View product details
 tm add <product-id>                # Add to cart
-tm cart list                       # View cart
+tm cart                            # View cart
 tm cart add <product-id>           # Add to cart
 tm cart remove <product-id>        # Remove from cart
 tm cart clear                      # Clear cart
 tm checkout                        # Proceed to checkout
+```
+
+### Reverse Marketplace
+
+Post what you need — sellers compete with offers.
+
+```bash
+tm request create Need a laptop --budget 700 --category hardware
+tm request list                    # Your requests
+tm request view <id>               # View proposals from sellers
+tm request accept <requestId> <proposalId>  # Accept best offer
+```
+
+### Watch & Price Alerts
+
+Set up persistent monitoring. Get notified via Telegram or in-app.
+
+```bash
+tm watch create search coffee --sort price --name "Coffee deals" --notify telegram
+tm watch list                      # List watch rules
+tm watch logs <id>                 # View match history
+tm watch pause <id>                # Pause a rule
+tm watch resume <id>               # Resume a rule
+tm watch delete <id>               # Delete a rule
+```
+
+### Telegram Integration
+
+```bash
+tm telegram link <code>            # Link Telegram for notifications
+tm telegram status                 # Check connection
+tm telegram unlink                 # Disconnect
 ```
 
 ### Orders
@@ -71,6 +114,16 @@ tm checkout                        # Proceed to checkout
 ```bash
 tm orders                          # View order history
 tm history                         # Alias for orders
+```
+
+### Jobs
+
+```bash
+tm jobs                            # Browse job listings
+tm jobs list                       # List all vacancies
+tm jobs view <id>                  # View job details
+tm jobs apply <id>                 # Apply to a job
+tm jobs my                         # Your applications
 ```
 
 ### Stores & Reviews
@@ -94,27 +147,36 @@ tm ai run <model> <input>          # Run an AI model
 tm ai credits                      # Check your credit balance
 tm ai topup <amount>               # Add credits ($5 minimum)
 tm ai history                      # View usage history
-
-# Shortcuts
-tm credits                         # Check credits (shortcut)
-tm topup <amount>                  # Add credits (shortcut)
+tm credits                         # Shortcut
+tm topup <amount>                  # Shortcut
 ```
 
 ### Aliases & Rewards
 
 ```bash
 tm alias list                      # List your aliases
-tm alias add <name> <command>      # Create alias
+tm alias add <name> <command>      # Create alias (e.g. "morning-coffee" -> "add coffee-03")
 tm alias remove <name>             # Remove alias
-tm aliases                         # Shortcut for alias list
+tm aliases                         # Shortcut
 
 tm reward list                     # List reward rules
-tm reward add <product> <pushes>   # Auto-order after N pushes
+tm reward add <product> <pushes>   # Auto-order after N git pushes
 tm reward remove <id>              # Remove reward rule
-tm rewards                         # Shortcut for reward list
+tm rewards                         # Shortcut
 ```
 
-### Categories & Offers
+### Profile
+
+```bash
+tm profile                         # View your profile
+tm profile set name "John Doe"     # Update your name
+tm profile set phone "+1234567890" # Update phone
+tm profile set address "123 Main"  # Update address
+tm profile set city "Berlin"       # Update city
+tm profile set country "DE"        # Update country
+```
+
+### Categories
 
 ```bash
 tm categories                      # List all categories
@@ -122,51 +184,44 @@ tm category <slug>                 # List products in category
 tm offers                          # List all offers
 ```
 
-Available categories:
-- `coffee` — Specialty coffee for developers
-- `lunch` — Meal subscriptions & delivery
-- `snacks` — Healthy snacks & energy packs
-- `focus` — Deep work kits & nootropics
-- `health` — Yoga, massage, developer health
-- `coworking` — Coworking spaces & nomad services
-- `digital` — Productivity tools & apps
-- `services` — Taxi, booking, personal services
+Available categories: `coffee`, `lunch`, `snacks`, `focus`, `health`, `coworking`, `digital`, `services`, `hardware`, `events`, `b2b`, `travel`, and more.
+
+### Merchant (Sellers)
+
+```bash
+tm merchant dashboard              # Seller dashboard
+tm merchant product create --name "..." --price 10 --category coffee --description "..."
+tm merchant orders                 # View store orders
+tm merchant analytics              # Sales analytics
+```
 
 ### Configuration
 
 ```bash
 tm config get api                  # Show API endpoint
-tm config set api <url>            # Set API endpoint
-```
-
-### Other
-
-```bash
+tm config set api <url>            # Set custom API endpoint
 tm about                           # About TerminalMarket
-tm help                            # Show help
-tm help <command>                  # Help for specific command
+tm --help                          # Show help
 tm --version                       # Show version
 ```
 
-## Examples
+## Pipe Examples
+
+TerminalMarket CLI supports Unix-style pipes:
 
 ```bash
-# Browse coffee products in Berlin
-tm search "coffee" --city Berlin
+# Find cheapest coffee
+tm search coffee | sort price | head 1
 
-# Add product to cart and checkout
-tm add 123
-tm checkout
+# Count snacks under $10
+tm search snacks | filter --max-price 10 | count
 
-# Leave a 5-star review
-tm review 1 5 "Great coffee, fast delivery!"
+# Monitor laptop prices via Telegram
+tm watch create search laptop --sort price --name "Laptop tracker" --notify telegram
 
-# View your order history
-tm orders
-
-# Use AI services
-tm ai topup 10
-tm ai run text-rewrite "Fix this text"
+# One-command morning routine (via alias)
+tm alias add morning "add coffee-03"
+tm morning
 ```
 
 ## Configuration
