@@ -107,8 +107,14 @@ program
   .name("tm")
   .description("TerminalMarket CLI — marketplace for developers")
   .version(VERSION)
-  .helpOption(false)
+  .helpOption('-h, --help', 'Show help')
   .addHelpCommand(false);
+
+// Override --help to show our custom help instead of Commander's default
+program.helpInformation = () => '';
+program.on('--help', () => {
+  showHelp(null, 'basic');
+});
 
 // -----------------
 // config
@@ -459,14 +465,19 @@ cart
     try {
       const cartData = await apiGet("/cart");
       
-      let total = 0;
-      if (cartData.items?.length) {
-        cartData.items.forEach((item) => {
-          total += (item.price || 0) * (item.quantity || 1);
-        });
-      }
+      // Normalize: API returns item.product.price, flatten for display
+      const items = (cartData.items || []).map((item) => ({
+        ...item,
+        name: item.name || item.product?.name || `Product #${item.productId}`,
+        price: item.price ?? item.product?.price ?? 0,
+      }));
       
-      printCart(cartData.items || [], total);
+      let total = 0;
+      items.forEach((item) => {
+        total += (parseFloat(item.price) || 0) * (item.quantity || 1);
+      });
+      
+      printCart(items, total);
     } catch (e) {
       printError(e?.message || String(e));
       process.exitCode = 1;
@@ -554,9 +565,11 @@ program
       
       let total = 0;
       cartData.items.forEach((item, i) => {
-        const subtotal = (item.price || 0) * (item.quantity || 1);
+        const name = item.name || item.product?.name || `Product #${item.productId}`;
+        const price = parseFloat(item.price ?? item.product?.price ?? 0);
+        const subtotal = price * (item.quantity || 1);
         total += subtotal;
-        console.log(`  ${i + 1}. ${item.name} x${item.quantity} = $${subtotal.toFixed(2)}`);
+        console.log(`  ${i + 1}. ${name} x${item.quantity} = $${subtotal.toFixed(2)}`);
       });
       
       console.log("");
